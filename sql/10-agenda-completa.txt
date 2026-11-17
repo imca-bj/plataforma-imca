@@ -1,0 +1,41 @@
+-- 10 · Agenda completa: atención sin cita, terapia grupal, marcar asistencia por terapeuta y reportes
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve:
+--   · Guarda si una atención fue sin cita y si la sesión es individual o grupal.
+--   · Cada terapeuta puede marcar llegó / no llegó de sus propias citas y registrar sus atenciones sin cita.
+--   · Cada terapeuta puede dar de alta usuarios nuevos, y ve los que él mismo registró.
+-- Se puede correr más de una vez sin causar error.
+-- IMPORTANTE: correr este archivo ANTES de publicar la carpeta app nueva.
+
+-- 1) Columnas nuevas en citas
+alter table citas add column if not exists sin_cita boolean not null default false;
+alter table citas add column if not exists modalidad text not null default 'Terapia individual';
+alter table citas drop constraint if exists citas_modalidad_check;
+alter table citas add constraint citas_modalidad_check
+  check (modalidad in ('Terapia individual', 'Terapia grupal'));
+
+-- 2) Citas: el terapeuta marca asistencia de las suyas y registra sus atenciones sin cita
+drop policy if exists "citas del terapeuta" on citas;
+create policy "citas del terapeuta" on citas for update to authenticated
+  using (mi_rol() = 'terapeuta' and terapeuta_id = auth.uid())
+  with check (mi_rol() = 'terapeuta' and terapeuta_id = auth.uid());
+
+drop policy if exists "citas insertar terapeuta" on citas;
+create policy "citas insertar terapeuta" on citas for insert to authenticated
+  with check (mi_rol() = 'terapeuta' and terapeuta_id = auth.uid());
+
+-- 3) Usuarios: el personal puede dar de alta; solo agenda y admin editan; cada quien ve los que registró
+drop policy if exists "pacientes escribir" on pacientes;
+
+drop policy if exists "pacientes insertar" on pacientes;
+create policy "pacientes insertar" on pacientes for insert to authenticated
+  with check (mi_rol() in ('admin', 'agenda', 'coordinacion', 'terapeuta'));
+
+drop policy if exists "pacientes actualizar" on pacientes;
+create policy "pacientes actualizar" on pacientes for update to authenticated
+  using (mi_rol() in ('admin', 'agenda'))
+  with check (mi_rol() in ('admin', 'agenda'));
+
+drop policy if exists "pacientes leer propios" on pacientes;
+create policy "pacientes leer propios" on pacientes for select to authenticated
+  using (creado_por = auth.uid());

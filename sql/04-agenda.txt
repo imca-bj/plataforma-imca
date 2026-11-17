@@ -1,0 +1,130 @@
+-- 04 · Tablas de la agenda de atención
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: crea las tablas de pacientes (solo datos de registro, sin datos clínicos), oficinas, citas, bloqueos, bitácora
+-- y la conexión con Google Calendar. Las reglas de acceso dejan leer a todo el personal y escribir a admin y agenda.
+-- Nadie borra citas: se cancelan con la opción "Canceló".
+
+create table pacientes (
+  id uuid primary key default gen_random_uuid(),
+  numero text unique not null,
+  nombre text not null,
+  telefono text,
+  sexo text,
+  edad int,
+  origen text,
+  creado timestamptz not null default now(),
+  creado_por uuid references perfiles(id)
+);
+
+create table oficinas (
+  id uuid primary key default gen_random_uuid(),
+  nombre text unique not null,
+  activa boolean not null default true
+);
+
+insert into oficinas (nombre) values ('101'), ('232'), ('259'), ('64')
+on conflict (nombre) do nothing;
+
+create table citas (
+  id uuid primary key default gen_random_uuid(),
+  numero text unique not null,
+  paciente_id uuid not null references pacientes(id),
+  terapeuta_id uuid not null references perfiles(id),
+  oficina_id uuid references oficinas(id),
+  fecha date not null,
+  hora time not null,
+  duracion int not null default 40,
+  tipo text not null check (tipo in ('Primer contacto', 'Seguimiento')),
+  origen text check (origen in ('WhatsApp', 'Oficina', 'Llamada', 'Otro')),
+  como_supo text,
+  como_supo_detalle text,
+  confirmacion text not null default 'Por confirmar'
+    check (confirmacion in ('Por confirmar', 'Confirmó', 'No contesta', 'Canceló', 'Reprogramar')),
+  asistencia text check (asistencia in ('Llegó', 'No llegó')),
+  motivo text,
+  observaciones text,
+  evento_google text,
+  reprogramada_de uuid references citas(id),
+  agendo uuid references perfiles(id),
+  creada timestamptz not null default now(),
+  actualizada timestamptz not null default now()
+);
+
+create table bloqueos (
+  id uuid primary key default gen_random_uuid(),
+  terapeuta_id uuid references perfiles(id),
+  desde date not null,
+  hasta date not null,
+  hora_desde time,
+  hora_hasta time,
+  motivo text,
+  creado_por uuid references perfiles(id),
+  creado timestamptz not null default now(),
+  activo boolean not null default true
+);
+
+create table bitacora_agenda (
+  id bigint generated always as identity primary key,
+  fecha timestamptz not null default now(),
+  usuario uuid references perfiles(id),
+  accion text not null,
+  detalle text
+);
+
+-- Guarda la cuenta de Gmail de cada terapeuta y su permiso para crear eventos.
+-- No tiene reglas para usuarios: solo la función del servidor puede leerla.
+create table google_calendario (
+  perfil_id uuid primary key references perfiles(id),
+  correo_google text not null,
+  refresh_token text not null,
+  conectado timestamptz not null default now()
+);
+
+alter table pacientes enable row level security;
+alter table oficinas enable row level security;
+alter table citas enable row level security;
+alter table bloqueos enable row level security;
+alter table bitacora_agenda enable row level security;
+alter table google_calendario enable row level security;
+
+-- Pacientes
+create policy "pacientes leer" on pacientes for select to authenticated
+  using (mi_rol() in ('admin', 'agenda', 'coordinacion', 'terapeuta', 'consulta'));
+create policy "pacientes escribir" on pacientes for all to authenticated
+  using (mi_rol() in ('admin', 'agenda'))
+  with check (mi_rol() in ('admin', 'agenda'));
+
+-- Oficinas
+create policy "oficinas leer" on oficinas for select to authenticated
+  using (mi_rol() in ('admin', 'agenda', 'coordinacion', 'terapeuta', 'consulta'));
+create policy "oficinas escribir" on oficinas for all to authenticated
+  using (mi_rol() = 'admin')
+  with check (mi_rol() = 'admin');
+
+-- Citas
+create policy "citas leer" on citas for select to authenticated
+  using (mi_rol() in ('admin', 'agenda', 'coordinacion', 'terapeuta', 'consulta'));
+create policy "citas escribir agenda" on citas for all to authenticated
+  using (mi_rol() in ('admin', 'agenda'))
+  with check (mi_rol() in ('admin', 'agenda'));
+create policy "citas del terapeuta" on citas for update to authenticated
+  using (terapeuta_id = auth.uid())
+  with check (terapeuta_id = auth.uid());
+
+-- Bloqueos
+create policy "bloqueos leer" on bloqueos for select to authenticated
+  using (mi_rol() in ('admin', 'agenda', 'coordinacion', 'terapeuta', 'consulta'));
+create policy "bloqueos escribir" on bloqueos for all to authenticated
+  using (mi_rol() in ('admin', 'agenda'))
+  with check (mi_rol() in ('admin', 'agenda'));
+
+-- Bitácora: cualquiera registra lo que hace; solo admin la lee
+create policy "bitacora leer admin" on bitacora_agenda for select to authenticated
+  using (mi_rol() = 'admin');
+create policy "bitacora registrar" on bitacora_agenda for insert to authenticated
+  with check (usuario = auth.uid());
+
+-- Permisos de tabla (necesarios porque "Automatically expose new tables" está apagado)
+-- Nadie tiene permiso de borrar: las citas se cancelan.
+grant select, insert, update on pacientes, oficinas, citas, bloqueos, bitacora_agenda to authenticated;
+grant usage on all sequences in schema public to authenticated;
