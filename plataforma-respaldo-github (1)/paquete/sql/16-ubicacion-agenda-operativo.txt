@@ -1,0 +1,14 @@
+-- 16 · Agenda operativo: ubicación con link de Google Maps, supermanzana y colonia
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: agrega los campos nuevos de ubicación a cada plática o evento.
+-- Se puede correr más de una vez sin causar error.
+
+alter table pl_actividades
+  add column if not exists mapa_url text,
+  add column if not exists supermanzana text,
+  add column if not exists colonia text;
+
+-- Verificación: debe mostrar las tres columnas nuevas (vacías por ahora)
+select mapa_url, supermanzana, colonia
+from pl_actividades
+limit 5;

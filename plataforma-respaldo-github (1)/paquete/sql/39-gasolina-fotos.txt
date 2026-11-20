@@ -1,0 +1,19 @@
+-- 39 · Fotos de gasolina: espacio privado y permisos
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para guardar las fotos del odómetro y del nivel en un espacio privado.
+-- Quien registra sube sus fotos; quien tiene "ver" puede abrirlas. Nadie ve fotos por una liga pública.
+
+insert into storage.buckets (id, name, public)
+values ('gasolina-fotos', 'gasolina-fotos', false)
+on conflict (id) do nothing;
+
+drop policy if exists "gas fotos leer" on storage.objects;
+create policy "gas fotos leer" on storage.objects for select to authenticated
+  using (bucket_id = 'gasolina-fotos' and gas_tiene('ver'));
+
+drop policy if exists "gas fotos subir" on storage.objects;
+create policy "gas fotos subir" on storage.objects for insert to authenticated
+  with check (bucket_id = 'gasolina-fotos' and gas_tiene('registrar'));
+
+-- Revisión: debe salir una fila con public = false
+select id, public from storage.buckets where id = 'gasolina-fotos';

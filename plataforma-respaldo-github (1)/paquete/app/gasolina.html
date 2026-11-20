@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Control de gasolina · IMCA</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+  :root {
+    --bg: #f4f6f5; --card: #ffffff; --ink: #1c2321; --muted: #66706d; --line: #e1e6e4;
+    --brand: #9f2241; --brand-soft: #ecebe8;
+    --ok: #1f7a3f; --ok-soft: #e2f4e8;
+    --bad: #b3261e; --bad-soft: #fbe5e3;
+    --warn: #9a5b00; --warn-soft: #fdf0d8;
+    --gray-soft: #eceff0; --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .oculto { display: none !important; }
+
+  header { position: sticky; top: 0; z-index: 5; background: var(--brand); color: #fff;
+    padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  header strong { font-size: 17px; font-weight: 650; }
+  header .quien { font-size: 12.5px; display: flex; gap: 10px; align-items: center; }
+  header .quien a { color: #fff; opacity: .9; }
+
+  main { padding: 12px 16px 96px; max-width: 760px; margin: 0 auto; }
+
+  nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 6; background: var(--card);
+    border-top: 1px solid var(--line); display: flex; padding-bottom: env(safe-area-inset-bottom); }
+  nav.tabs button { flex: 1; min-width: 0; border: 0; background: none; padding: 10px 1px 9px; font-size: 11px;
+    color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
+  nav.tabs button .ico { font-size: 19px; line-height: 1; }
+  nav.tabs button.activo { color: var(--brand); font-weight: 650; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+  h2 { font-size: 18px; margin: 4px 0 12px; }
+  h3 { font-size: 13px; margin: 16px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+  label { display: block; font-size: 12.5px; color: var(--muted); margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: #fff; outline: none; }
+  input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+  input:disabled { background: var(--gray-soft); color: var(--muted); }
+  textarea { min-height: 70px; resize: vertical; }
+  .fila { display: flex; gap: 10px; }
+  .fila > * { flex: 1; min-width: 0; }
+  .check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14.5px; margin: 10px 0; }
+  .check input { width: 20px; height: 20px; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line);
+    background: #fff; border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 550; color: var(--ink); }
+  .btn.pri { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .btn.full { width: 100%; padding: 13px; margin-top: 14px; }
+  .btn.sm { padding: 7px 10px; font-size: 13px; }
+  .btn:disabled { opacity: .5; }
+
+  .foto { position: relative; display: block; margin: 4px 0 6px; border: 2px dashed #cfd6d3; border-radius: 12px;
+    padding: 14px; text-align: center; color: var(--muted); cursor: pointer; background: #fff; overflow: hidden; }
+  .foto input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+  .foto img { display: block; width: 100%; max-height: 240px; object-fit: contain; border-radius: 8px; }
+
+  .cita { display: flex; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px; margin-bottom: 8px; cursor: pointer; }
+  .cita .hora { min-width: 78px; font-weight: 700; font-size: 14px; }
+  .cita .info { flex: 1; min-width: 0; }
+  .cita .nombre { font-weight: 600; }
+  .cita .meta { color: var(--muted); font-size: 13px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .chip { font-size: 11.5px; padding: 2px 8px; border-radius: 10px; background: var(--gray-soft); color: var(--muted); font-weight: 600; }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.brand { background: var(--brand-soft); color: var(--brand); }
+
+  .lista-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; }
+  .lista-item small, .nota { color: var(--muted); font-size: 12.5px; }
+  .vacio { text-align: center; color: var(--muted); padding: 36px 10px; }
+  .aviso { background: var(--warn-soft); color: var(--warn); border-left: 4px solid var(--warn); border-radius: 10px;
+    padding: 10px 12px; margin: 10px 0; font-size: 14px; }
+  .foto-grande { display: block; width: 100%; border-radius: 10px; border: 1px solid var(--line); margin-bottom: 6px; }
+
+  .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+  .kpi b { display: block; font-size: 20px; margin: 2px 0; }
+  .kpi small { color: var(--muted); font-size: 12px; }
+  .barra { height: 10px; background: var(--gray-soft); border-radius: 6px; overflow: hidden; margin: 4px 0 10px; }
+  .barra span { display: block; height: 100%; background: var(--brand); }
+
+  .modal-fondo { position: fixed; inset: 0; background: rgba(15,25,22,.45); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+  .modal { background: var(--bg); width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto;
+    border-radius: 18px 18px 0 0; padding: 16px 16px 28px; }
+
+  #toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); background: #222; color: #fff; padding: 10px 16px;
+    border-radius: 10px; font-size: 14px; z-index: 30; max-width: 90%; text-align: center; }
+  #toast.error { background: var(--bad); }
+  #cargando { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--brand); z-index: 40; animation: carga 1s infinite linear; transform-origin: left; }
+  @keyframes carga { 0% { transform: scaleX(.05); } 50% { transform: scaleX(.7); } 100% { transform: scaleX(1); opacity: .2; } }
+
+  .aviso-acceso { max-width: 420px; margin: 12vh auto 0; text-align: center; }
+  .aviso-acceso b { font-size: 18px; color: var(--brand); display: block; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<div id="cargando" class="oculto"></div>
+<div id="toast" class="oculto"></div>
+
+<section id="vista-error" class="oculto">
+  <main>
+    <div class="aviso-acceso card">
+      <b>Control de gasolina</b>
+      <p id="e-msg"></p>
+      <a href="index.html">Volver a la pantalla principal</a>
+    </div>
+  </main>
+</section>
+
+<section id="vista-app" class="oculto">
+  <header>
+    <strong>Control de gasolina</strong>
+    <div class="quien"><span id="h-nombre"></span><a href="index.html">Plataforma</a></div>
+  </header>
+  <main id="contenido"></main>
+  <nav class="tabs" id="tabs"></nav>
+</section>
+
+<div id="modal-raiz"></div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const BUCKET = 'gasolina-fotos';
+
+/* ---------------- Estado ---------------- */
+var S = { uid: null, nombre: '', permisos: {}, vehiculos: [], personas: [], hoy: '', tab: 'registrar' };
+
+var TABS = {
+  registrar:  { txt: 'Registrar',  ico: '⛽', fn: vRegistrar,  permiso: 'registrar' },
+  historial:  { txt: 'Historial',  ico: '📋', fn: vHistorial,  permiso: 'ver' },
+  mediciones: { txt: 'Mediciones', ico: '📊', fn: vMediciones, permiso: 'ver' },
+  vehiculos:  { txt: 'Catálogo',   ico: '📇', fn: vVehiculos,  permiso: 'administrar' }
+};
+
+/* ---------------- Utilidades ---------------- */
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function fmtFecha(s) { var p = String(s).slice(0, 10).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; }
+function fmtNum(n) { return Number(n || 0).toLocaleString('es-MX'); }
+function hoyCancun() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cancun', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+function msgError(e) { return ((e && e.message) || String(e)).replace(/^Error:\s*/, ''); }
+
+function toast(msg, error) {
+  var t = $('toast'); t.textContent = msg; t.className = error ? 'error' : '';
+  clearTimeout(toast._t); toast._t = setTimeout(function () { t.className = 'oculto'; }, error ? 4500 : 2200);
+}
+
+var enVuelo = 0;
+function cargando(on) {
+  enVuelo += on ? 1 : -1; if (enVuelo < 0) enVuelo = 0;
+  $('cargando').classList.toggle('oculto', enVuelo === 0);
+}
+
+// Reduce la foto a 1600 px en JPG (calidad 0.82) para que suba rápido desde el celular.
+function fotoAJpg(file) {
+  return new Promise(function (ok, mal) {
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onerror = function () { URL.revokeObjectURL(url); mal(new Error('No se pudo abrir la foto.')); };
+    img.onload = function () {
+      var k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      var cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      cv.toBlob(function (b) { b ? ok(b) : mal(new Error('No se pudo preparar la foto.')); }, 'image/jpeg', 0.82);
+    };
+    img.src = url;
+  });
+}
+
+function abrirModal(html) {
+  $('modal-raiz').innerHTML = '<div class="modal-fondo" id="m-fondo"><div class="modal">' + html + '</div></div>';
+  $('m-fondo').onclick = function (e) { if (e.target.id === 'm-fondo') cerrarModal(); };
+}
+function cerrarModal() { $('modal-raiz').innerHTML = ''; }
+
+/* ---------------- Arranque ---------------- */
+function mostrarError(msg) {
+  $('vista-app').classList.add('oculto');
+  $('vista-error').classList.remove('oculto');
+  $('e-msg').textContent = msg;
+}
+
+async function arrancar() {
+  try {
+    var s = await sb.auth.getSession();
+    var session = s.data.session;
+    if (!session) return location.replace('index.html');
+    if ((session.user.user_metadata || {}).debe_cambiar_clave) return location.replace('index.html');
+    S.uid = session.user.id;
+
+    var perfil = await sb.from('perfiles').select('nombre, activo').eq('id', S.uid).single();
+    if (perfil.error || !perfil.data || !perfil.data.activo) return location.replace('index.html');
+    S.nombre = perfil.data.nombre;
+
+    var claves = ['ver', 'registrar', 'administrar'];
+    var res = await Promise.all(claves.map(function (c) { return sb.rpc('gas_tiene', { p_clave: c }); }));
+    claves.forEach(function (c, i) { S.permisos[c] = res[i].data === true; });
+    if (!S.permisos.ver && !S.permisos.registrar) {
+      return mostrarError('No tienes acceso al módulo de Control de gasolina. Pide permiso desde la pantalla Personal.');
+    }
+
+    S.hoy = hoyCancun();
+    await cargarVehiculos();
+    if (S.permisos.administrar || S.permisos.registrar) await cargarPersonas();
+    entrar();
+  } catch (e) {
+    mostrarError(msgError(e));
+  }
+}
+
+async function cargarVehiculos() {
+  var r = await sb.from('gas_vehiculos').select('id, nombre, placas, activo').order('nombre');
+  if (r.error) throw r.error;
+  S.vehiculos = r.data;
+}
+
+// Personas con acceso a gasolina (para que el administrador registre a nombre de un chofer)
+async function cargarPersonas() {
+  var acc = await sb.from('acceso_persona').select('perfil_id')
+    .eq('modulo', 'gasolina').eq('activo', true)
+    .in('rol', ['administrador', 'coordinador', 'operativo']);
+  if (acc.error) throw acc.error;
+  var ids = acc.data.map(function (x) { return x.perfil_id; });
+  var nom = ids.length ? await sb.from('perfiles').select('id, nombre').in('id', ids) : { data: [], error: null };
+  if (nom.error) throw nom.error;
+  S.personas = nom.data.map(function (x) {
+    return { id: x.id, nombre: x.nombre };
+  }).sort(function (a, b) { return a.nombre.localeCompare(b.nombre, 'es'); });
+}
+
+function entrar() {
+  $('vista-error').classList.add('oculto');
+  $('vista-app').classList.remove('oculto');
+  $('h-nombre').textContent = S.nombre + (S.permisos.administrar ? ' · Admin' : '');
+  var permitidas = Object.keys(TABS).filter(function (k) { return S.permisos[TABS[k].permiso]; });
+  $('tabs').innerHTML = permitidas.map(function (k) {
+    return '<button data-tab="' + k + '"><span class="ico">' + TABS[k].ico + '</span><span>' + TABS[k].txt + '</span></button>';
+  }).join('');
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) {
+    b.onclick = function () { irA(b.getAttribute('data-tab')); };
+  });
+  irA(permitidas[0]);
+}
+
+function irA(tab) {
+  S.tab = tab;
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) {
+    b.classList.toggle('activo', b.getAttribute('data-tab') === tab);
+  });
+  window.scrollTo(0, 0);
+  TABS[tab].fn();
+}
+
+/* ---------------- Registrar carga ---------------- */
+function vRegistrar() {
+  var activos = S.vehiculos.filter(function (v) { return v.activo; });
+  var opcVeh = activos.length
+    ? activos.map(function (v) { return '<option value="' + esc(v.id) + '">' + esc(v.nombre) + (v.placas ? ' · ' + esc(v.placas) : '') + '</option>'; }).join('')
+    : '<option value="">No hay vehículos activos</option>';
+
+  var choferHtml = S.permisos.administrar
+    ? '<label for="r-chofer">Chofer</label><select id="r-chofer">' +
+        S.personas.map(function (c) { return '<option value="' + esc(c.id) + '"' + (c.id === S.uid ? ' selected' : '') + '>' + esc(c.nombre) + '</option>'; }).join('') +
+      '</select>'
+    : '<label>Chofer</label><input value="' + esc(S.nombre) + '" disabled>';
+
+  $('contenido').innerHTML =
+    '<h2>Registrar carga</h2>' +
+    '<div class="card">' +
+      '<label for="r-veh">Vehículo</label><select id="r-veh">' + opcVeh + '</select>' +
+      choferHtml +
+      '<div class="fila">' +
+        '<div><label for="r-fecha">Fecha</label><input type="date" id="r-fecha" max="' + S.hoy + '" value="' + S.hoy + '"></div>' +
+        '<div><label for="r-litros">Litros cargados</label><input id="r-litros" inputmode="decimal" placeholder="0.00"></div>' +
+      '</div>' +
+      '<label for="r-km">Kilometraje del odómetro</label>' +
+      '<input id="r-km" inputmode="numeric" placeholder="Ej. 125430">' +
+
+      '<h3>Fotos</h3>' +
+      '<label>Foto del odómetro (kilometraje)</label>' +
+      '<label class="foto"><input type="file" id="r-foto-odo" accept="image/*" capture="environment">' +
+        '<span id="p-odo">📷 Tomar o elegir foto</span><img id="v-odo" alt="" class="oculto"></label>' +
+      '<label>Foto del nivel de gasolina</label>' +
+      '<label class="foto"><input type="file" id="r-foto-niv" accept="image/*" capture="environment">' +
+        '<span id="p-niv">📷 Tomar o elegir foto</span><img id="v-niv" alt="" class="oculto"></label>' +
+
+      '<h3>Incidencia</h3>' +
+      '<label class="check"><input type="checkbox" id="r-inc"> Hubo alguna incidencia con la unidad</label>' +
+      '<div id="r-inc-box" class="oculto">' +
+        '<label for="r-inc-txt">Describe la incidencia</label>' +
+        '<textarea id="r-inc-txt" placeholder="Ej. Golpe en la puerta trasera, luz de check engine encendida"></textarea>' +
+      '</div>' +
+
+      '<button class="btn pri full" id="r-guardar">Guardar carga</button>' +
+    '</div>';
+
+  prevFoto('r-foto-odo', 'v-odo', 'p-odo');
+  prevFoto('r-foto-niv', 'v-niv', 'p-niv');
+  $('r-inc').onchange = function () { $('r-inc-box').classList.toggle('oculto', !$('r-inc').checked); };
+  $('r-guardar').onclick = guardarCarga;
+}
+
+function prevFoto(inputId, imgId, textoId) {
+  $(inputId).onchange = function () {
+    var f = $(inputId).files[0];
+    if (!f) { $(imgId).classList.add('oculto'); $(textoId).classList.remove('oculto'); return; }
+    $(imgId).src = URL.createObjectURL(f);
+    $(imgId).classList.remove('oculto');
+    $(textoId).classList.add('oculto');
+  };
+}
+
+async function guardarCarga() {
+  var veh = $('r-veh').value;
+  var litros = parseFloat($('r-litros').value.replace(',', '.'));
+  var kmTxt = $('r-km').value.trim(), km = Number(kmTxt);
+  var fOdo = $('r-foto-odo').files[0], fNiv = $('r-foto-niv').files[0];
+  var inc = $('r-inc').checked, incTxt = $('r-inc-txt').value.trim();
+
+  if (!veh) return toast('Elige el vehículo.', true);
+  if (!$('r-fecha').value || $('r-fecha').value > S.hoy) return toast('La fecha no puede ser futura.', true);
+  if (!(litros > 0 && litros <= 300)) return toast('Escribe los litros cargados (mayor a 0).', true);
+  if (!kmTxt || !Number.isInteger(km) || km < 0) return toast('Escribe el kilometraje del odómetro (solo números).', true);
+  if (!fOdo || !fNiv) return toast('Faltan fotos: del odómetro y del nivel de gasolina.', true);
+  if (inc && incTxt.length < 3) return toast('Describe la incidencia.', true);
+
+  $('r-guardar').disabled = true;
+  cargando(true);
+  var rutaOdo = null, rutaNiv = null;
+  try {
+    var base = S.uid + '/' + Date.now();
+    rutaOdo = base + '-odometro.jpg';
+    rutaNiv = base + '-nivel.jpg';
+    var blobs = await Promise.all([fotoAJpg(fOdo), fotoAJpg(fNiv)]);
+    var up1 = await sb.storage.from(BUCKET).upload(rutaOdo, blobs[0], { contentType: 'image/jpeg' });
+    if (up1.error) throw up1.error;
+    var up2 = await sb.storage.from(BUCKET).upload(rutaNiv, blobs[1], { contentType: 'image/jpeg' });
+    if (up2.error) throw up2.error;
+
+    var perfilChofer = S.permisos.administrar && $('r-chofer') ? $('r-chofer').value : S.uid;
+    var r = await sb.rpc('gas_registrar', {
+      p_vehiculo: veh, p_fecha: $('r-fecha').value, p_litros: litros, p_km: km,
+      p_foto_odometro: rutaOdo, p_foto_nivel: rutaNiv,
+      p_incidencia: inc ? incTxt : null, p_perfil: perfilChofer
+    });
+    if (r.error) throw r.error;
+    toast('Carga guardada');
+    vRegistrar();
+  } catch (e) {
+    // Si la base rechazó la carga, quitamos las fotos que ya se subieron
+    var sobran = [rutaOdo, rutaNiv].filter(Boolean);
+    if (sobran.length) await sb.storage.from(BUCKET).remove(sobran);
+    toast(msgError(e), true);
+    $('r-guardar').disabled = false;
+  } finally {
+    cargando(false);
+  }
+}
+
+/* ---------------- Historial ---------------- */
+function vHistorial() {
+  $('contenido').innerHTML =
+    '<h2>Historial de cargas</h2>' +
+    '<select id="h-veh" style="margin-bottom:10px"><option value="">Todos los vehículos</option>' +
+      S.vehiculos.map(function (v) { return '<option value="' + esc(v.id) + '">' + esc(v.nombre) + '</option>'; }).join('') +
+    '</select>' +
+    '<div id="h-lista"><div class="vacio">Cargando…</div></div>';
+  $('h-veh').onchange = cargarHistorial;
+  cargarHistorial();
+}
+
+async function cargarHistorial() {
+  var veh = $('h-veh').value;
+  var q = sb.from('gas_cargas')
+    .select('id, fecha, registrado, chofer_nombre, litros, km_odometro, km_recorridos, incidencia, vehiculo_id, gas_vehiculos(nombre)')
+    .order('fecha', { ascending: false }).order('registrado', { ascending: false }).limit(150);
+  if (veh) q = q.eq('vehiculo_id', veh);
+  var r = await q;
+  if (S.tab !== 'historial' || !$('h-lista')) return;
+  if (r.error) { $('h-lista').innerHTML = '<div class="vacio">' + esc(msgError(r.error)) + '</div>'; return; }
+  var lista = r.data;
+  if (!lista.length) { $('h-lista').innerHTML = '<div class="vacio">Todavía no hay cargas registradas.</div>'; return; }
+  $('h-lista').innerHTML = lista.map(function (c) {
+    var rend = c.km_recorridos > 0 && c.litros > 0 ? '<span class="chip brand">' + (c.km_recorridos / c.litros).toFixed(1) + ' km/L</span>' : '';
+    return '<div class="cita" data-id="' + esc(c.id) + '">' +
+      '<div class="hora">' + fmtFecha(c.fecha) + '</div>' +
+      '<div class="info">' +
+        '<div class="nombre">' + esc(c.gas_vehiculos ? c.gas_vehiculos.nombre : '') + '</div>' +
+        '<div class="meta">' + esc(c.chofer_nombre) + ' · ' + Number(c.litros).toFixed(2) + ' L · ' + fmtNum(c.km_odometro) + ' km' +
+          (c.km_recorridos != null ? ' (+' + fmtNum(c.km_recorridos) + ')' : '') + '</div>' +
+        '<div class="chips">' + rend + (c.incidencia ? '<span class="chip bad">Incidencia</span>' : '') + '<span class="chip">Ver fotos</span></div>' +
+      '</div></div>';
+  }).join('');
+  Array.prototype.forEach.call($('h-lista').querySelectorAll('.cita'), function (n) {
+    n.onclick = function () {
+      var c = lista.filter(function (x) { return x.id === n.getAttribute('data-id'); })[0];
+      if (c) verCarga(c);
+    };
+  });
+}
+
+async function verCarga(c) {
+  cargando(true);
+  try {
+    var urls = await Promise.all([
+      sb.storage.from(BUCKET).createSignedUrl(c.id ? await rutaDeCarga(c.id, 'odo') : '', 3600),
+      sb.storage.from(BUCKET).createSignedUrl(c.id ? await rutaDeCarga(c.id, 'niv') : '', 3600)
+    ]);
+    abrirModal(
+      '<button class="btn sm" id="m-x" style="float:right">Cerrar</button>' +
+      '<h2>Carga del ' + fmtFecha(c.fecha) + '</h2>' +
+      '<p class="nota">' + esc(c.gas_vehiculos ? c.gas_vehiculos.nombre : '') + ' · ' + esc(c.chofer_nombre) + ' · ' + Number(c.litros).toFixed(2) + ' L · ' + fmtNum(c.km_odometro) + ' km</p>' +
+      (c.incidencia ? '<div class="aviso">⚠ ' + esc(c.incidencia) + '</div>' : '') +
+      '<h3>Odómetro</h3><img class="foto-grande" src="' + esc(urls[0].data ? urls[0].data.signedUrl : '') + '" alt="Odómetro">' +
+      '<h3>Nivel de gasolina</h3><img class="foto-grande" src="' + esc(urls[1].data ? urls[1].data.signedUrl : '') + '" alt="Nivel de gasolina">'
+    );
+    $('m-x').onclick = cerrarModal;
+  } catch (e) {
+    toast(msgError(e), true);
+  } finally {
+    cargando(false);
+  }
+}
+
+// Las rutas de las fotos se leen de la carga (se piden al abrir para no traerlas en la lista)
+async function rutaDeCarga(id, cual) {
+  var r = await sb.from('gas_cargas').select('foto_odometro, foto_nivel').eq('id', id).single();
+  if (r.error) throw r.error;
+  return cual === 'odo' ? r.data.foto_odometro : r.data.foto_nivel;
+}
+
+/* ---------------- Mediciones ---------------- */
+async function vMediciones() {
+  $('contenido').innerHTML = '<h2>Mediciones</h2><div id="m-cont"><div class="vacio">Cargando…</div></div>';
+  var r = await sb.from('gas_cargas').select('fecha, registrado, chofer_nombre, litros, km_odometro, km_recorridos, incidencia, vehiculo_id, gas_vehiculos(nombre, activo)');
+  if (S.tab !== 'mediciones' || !$('m-cont')) return;
+  if (r.error) { $('m-cont').innerHTML = '<div class="vacio">' + esc(msgError(r.error)) + '</div>'; return; }
+  $('m-cont').innerHTML = armarMediciones(r.data);
+}
+
+function armarMediciones(cargas) {
+  var dec = function (n) { return Number(n || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 }); };
+  var nuevo = function () { return { km: 0, litros: 0, cargas: 0, incidencias: 0, kmL: 0, litrosKm: 0, ultimo: null }; };
+  var sumar = function (x, c) {
+    x.litros += Number(c.litros || 0); x.cargas += 1;
+    if (c.incidencia) x.incidencias += 1;
+    if (c.km_recorridos != null) { x.km += c.km_recorridos; x.litrosKm += Number(c.litros || 0); }
+    if (!x.ultimo || (c.fecha + c.registrado) > (x.ultimo.fecha + x.ultimo.registrado)) x.ultimo = c;
+  };
+  var kmL = function (x) { return x.litrosKm > 0 ? (x.km / x.litrosKm).toFixed(2) : '—'; };
+
+  var general = nuevo(), porVeh = {}, porChofer = {}, porMes = {};
+  cargas.forEach(function (c) {
+    sumar(general, c);
+    var vid = c.vehiculo_id;
+    porVeh[vid] = porVeh[vid] || { nombre: c.gas_vehiculos ? c.gas_vehiculos.nombre : '', activo: c.gas_vehiculos ? c.gas_vehiculos.activo : true, x: nuevo() };
+    sumar(porVeh[vid].x, c);
+    porChofer[c.chofer_nombre] = porChofer[c.chofer_nombre] || nuevo();
+    sumar(porChofer[c.chofer_nombre], c);
+    var mes = String(c.fecha).slice(0, 7);
+    porMes[mes] = (porMes[mes] || 0) + Number(c.litros || 0);
+  });
+
+  var kpi = function (t, v, s) { return '<div class="kpi"><small>' + t + '</small><b>' + v + '</b>' + (s ? '<small>' + s + '</small>' : '') + '</div>'; };
+  var html =
+    '<div class="kpis">' +
+      kpi('Km recorridos', fmtNum(general.km)) +
+      kpi('Km por litro', kmL(general), 'promedio general') +
+      kpi('Litros cargados', dec(general.litros)) +
+      kpi('Cargas', fmtNum(general.cargas)) +
+      kpi('Incidencias', fmtNum(general.incidencias)) +
+    '</div>';
+
+  html += '<h3>Por vehículo</h3>';
+  var vehs = Object.keys(porVeh).map(function (k) { return porVeh[k]; });
+  html += vehs.length ? vehs.map(function (v) {
+    var x = v.x;
+    return '<div class="lista-item"><div style="min-width:0">' +
+      '<b>' + esc(v.nombre) + '</b>' + (v.activo ? '' : ' <span class="chip">Inactivo</span>') + '<br>' +
+      '<small>' + fmtNum(x.km) + ' km recorridos · ' + dec(x.litros) + ' L · ' + fmtNum(x.cargas) + ' cargas · ' + x.incidencias + ' incidencias</small><br>' +
+      '<small>Último odómetro: ' + (x.ultimo ? fmtNum(x.ultimo.km_odometro) + ' km (' + fmtFecha(x.ultimo.fecha) + ')' : 'sin cargas') + '</small>' +
+      '</div><div style="text-align:right;min-width:70px"><b>' + kmL(x) + '</b><br><small>km/L</small></div></div>';
+  }).join('') : '<div class="vacio">No hay vehículos.</div>';
+
+  html += '<h3>Por chofer</h3>';
+  var choferes = Object.keys(porChofer).sort(function (a, b) { return a.localeCompare(b, 'es'); });
+  html += choferes.length ? choferes.map(function (n) {
+    var x = porChofer[n];
+    return '<div class="lista-item"><div style="min-width:0"><b>' + esc(n) + '</b><br>' +
+      '<small>' + fmtNum(x.km) + ' km · ' + dec(x.litros) + ' L · ' + fmtNum(x.cargas) + ' cargas · ' + x.incidencias + ' incidencias</small>' +
+      '</div><div style="text-align:right;min-width:70px"><b>' + kmL(x) + '</b><br><small>km/L</small></div></div>';
+  }).join('') : '<div class="vacio">Todavía no hay cargas.</div>';
+
+  var meses = Object.keys(porMes).sort().slice(-6);
+  var maxMes = Math.max.apply(null, [1].concat(meses.map(function (m) { return porMes[m]; })));
+  html += '<h3>Litros por mes (últimos 6)</h3><div class="card">';
+  html += meses.length ? meses.map(function (m) {
+    var p = m.split('-');
+    return '<small>' + p[1] + '/' + p[0] + ' · ' + dec(porMes[m]) + ' L</small>' +
+      '<div class="barra"><span style="width:' + Math.round(porMes[m] / maxMes * 100) + '%"></span></div>';
+  }).join('') : '<div class="vacio">Todavía no hay cargas.</div>';
+  html += '</div>';
+  return html;
+}
+
+/* ---------------- Catálogo de vehículos (solo administrar) ---------------- */
+function vVehiculos() {
+  $('contenido').innerHTML =
+    '<h2>Catálogo</h2>' +
+    '<h3>Vehículos</h3>' +
+    '<div class="card">' +
+      '<label for="v-nom">Nombre</label><input id="v-nom" placeholder="Ej. Camioneta">' +
+      '<label for="v-pl">Placas</label><input id="v-pl" placeholder="Opcional">' +
+      '<button class="btn pri full" id="v-add">Agregar vehículo</button>' +
+    '</div>' +
+    '<div id="v-lista"></div>';
+  $('v-add').onclick = agregarVehiculo;
+  pintarVehiculos();
+}
+
+function pintarVehiculos() {
+  $('v-lista').innerHTML = S.vehiculos.length ? S.vehiculos.map(function (v) {
+    return '<div class="lista-item"><div><b>' + esc(v.nombre) + '</b><br><small>' + esc(v.placas || 'Sin placas') + '</small></div>' +
+      '<button class="btn sm ' + (v.activo ? '' : 'ok') + '" data-id="' + esc(v.id) + '">' +
+      (v.activo ? 'Desactivar' : 'Activar') + '</button></div>';
+  }).join('') : '<div class="vacio">No hay vehículos.</div>';
+
+  Array.prototype.forEach.call($('v-lista').querySelectorAll('button[data-id]'), function (b) {
+    b.onclick = async function () {
+      var v = S.vehiculos.filter(function (x) { return x.id === b.getAttribute('data-id'); })[0];
+      if (!v) return;
+      await guardarVehiculo({ id: v.id, nombre: v.nombre, placas: v.placas, activo: !v.activo });
+    };
+  });
+}
+
+async function agregarVehiculo() {
+  var nombre = $('v-nom').value.trim();
+  if (nombre.length < 2) return toast('Escribe el nombre del vehículo.', true);
+  await guardarVehiculo({ id: null, nombre: nombre, placas: $('v-pl').value.trim(), activo: true });
+}
+
+async function guardarVehiculo(d) {
+  cargando(true);
+  try {
+    var r = await sb.rpc('gas_guardar_vehiculo', { p_id: d.id, p_nombre: d.nombre, p_placas: d.placas || null, p_activo: d.activo });
+    if (r.error) throw r.error;
+    toast(d.id ? 'Cambio guardado' : 'Vehículo agregado');
+    await cargarVehiculos();
+    vVehiculos();
+  } catch (e) {
+    toast(msgError(e), true);
+  } finally {
+    cargando(false);
+  }
+}
+
+arrancar();
+</script>
+</body>
+</html>

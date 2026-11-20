@@ -1,0 +1,6 @@
+-- 03 · Permiso para leer perfiles
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: da permiso de lectura de la tabla perfiles a los usuarios que ya iniciaron sesión.
+-- La regla "leer mi perfil" sigue limitando que cada quien vea solo su propio perfil.
+
+grant select on perfiles to authenticated;

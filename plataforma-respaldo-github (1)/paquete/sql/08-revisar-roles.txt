@@ -1,0 +1,7 @@
+-- 08 · Revisar roles del personal (solo lectura, no cambia nada)
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: muestra el rol de cada cuenta para revisar por qué Google Calendar no acepta tu cita.
+
+select nombre, email, rol, activo
+from perfiles
+order by rol, nombre;

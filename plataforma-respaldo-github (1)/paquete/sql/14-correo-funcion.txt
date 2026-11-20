@@ -1,0 +1,27 @@
+-- 14 · Agenda operativo: guardar el correo de Gmail del calendario (solo una vez por persona)
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: permite que cada persona guarde su Gmail en el primer inicio de sesión,
+-- sin darle permiso para cambiar su rol ni sus permisos.
+-- Solo guarda si todavía está vacío. Se puede correr más de una vez sin causar error.
+
+create or replace function pl_guardar_correo(p_correo text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_correo is null or p_correo !~* '^[^\s@]+@gmail\.com$' then
+    raise exception 'Escribe un correo @gmail.com válido.';
+  end if;
+
+  update pl_personal
+     set correo_calendario = lower(trim(p_correo))
+   where perfil_id = auth.uid()
+     and correo_calendario is null;
+
+  if not found then
+    raise exception 'Tu correo de Gmail ya estaba guardado.';
+  end if;
+end;
+$$;
+
+grant execute on function pl_guardar_correo(text) to authenticated;
+
+-- Verificación: debe mostrar "Success. No rows returned" o un mensaje de error claro si ya estaba guardado.

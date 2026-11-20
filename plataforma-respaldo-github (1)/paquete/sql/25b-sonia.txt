@@ -1,0 +1,9 @@
+insert into personal_catalogo (nombre, area, puesto)
+select 'Sonia Guadalupe Chavez Celaya', '', ''
+where not exists (select 1 from personal_catalogo where nombre = 'Sonia Guadalupe Chavez Celaya');
+
+update vac_personal set personal_id = (select id from personal_catalogo where nombre = 'Sonia Guadalupe Chavez Celaya')
+where nombre = 'Sonia Guadalupe Chavez Celaya';
+
+select count(*) as total, count(perfil_id) as con_cuenta from personal_catalogo;
+select nombre as vacaciones_sin_enlazar from vac_personal where personal_id is null;

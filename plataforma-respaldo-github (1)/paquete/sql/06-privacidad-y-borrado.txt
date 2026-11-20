@@ -1,0 +1,93 @@
+-- 06 · Privacidad por terapeuta, borrado solo para admin y permisos de agenda
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve:
+--   · Cada terapeuta (y Clara) ve solo sus citas, sus usuarios y sus documentos.
+--   · Marlene (coordinación), Rossy (agenda), Ana y tú (admin) ven todo.
+--   · Solo admin (Ana y tú) puede borrar citas. Agenda puede agendar, editar, confirmar y cancelar, pero no borrar.
+
+-- 1) Citas: quién puede leer
+drop policy if exists "citas leer" on citas;
+create policy "citas leer" on citas for select to authenticated
+  using (
+    mi_rol() in ('admin', 'agenda', 'coordinacion', 'consulta')
+    or (mi_rol() = 'terapeuta' and terapeuta_id = auth.uid())
+  );
+
+-- 2) Citas: separar agendar/editar (agenda y admin) de borrar (solo admin)
+drop policy if exists "citas escribir agenda" on citas;
+drop policy if exists "citas insertar agenda" on citas;
+create policy "citas insertar agenda" on citas for insert to authenticated
+  with check (mi_rol() in ('admin', 'agenda'));
+drop policy if exists "citas actualizar agenda" on citas;
+create policy "citas actualizar agenda" on citas for update to authenticated
+  using (mi_rol() in ('admin', 'agenda'))
+  with check (mi_rol() in ('admin', 'agenda'));
+drop policy if exists "citas borrar admin" on citas;
+create policy "citas borrar admin" on citas for delete to authenticated
+  using (mi_rol() = 'admin');
+grant delete on citas to authenticated;
+
+-- Si se borra una cita, sus documentos y la cita que reprogramó quedan sin cita (no se borran).
+alter table adjuntos drop constraint if exists adjuntos_cita_id_fkey;
+alter table adjuntos add constraint adjuntos_cita_id_fkey
+  foreign key (cita_id) references citas(id) on delete set null;
+alter table citas drop constraint if exists citas_reprogramada_de_fkey;
+alter table citas add constraint citas_reprogramada_de_fkey
+  foreign key (reprogramada_de) references citas(id) on delete set null;
+
+-- 3) Usuarios: un terapeuta solo ve a quienes tienen cita con él
+drop policy if exists "pacientes leer" on pacientes;
+create policy "pacientes leer" on pacientes for select to authenticated
+  using (
+    mi_rol() in ('admin', 'agenda', 'coordinacion', 'consulta')
+    or (mi_rol() = 'terapeuta' and exists (
+          select 1 from citas c
+          where c.paciente_id = pacientes.id and c.terapeuta_id = auth.uid()))
+  );
+
+-- 4) Documentos del usuario: mismo criterio
+drop policy if exists "adjuntos leer" on adjuntos;
+create policy "adjuntos leer" on adjuntos for select to authenticated
+  using (
+    mi_rol() in ('admin', 'agenda', 'coordinacion')
+    or (mi_rol() = 'terapeuta' and exists (
+          select 1 from citas c
+          where c.paciente_id = adjuntos.paciente_id and c.terapeuta_id = auth.uid()))
+  );
+
+drop policy if exists "adjuntos subir" on adjuntos;
+create policy "adjuntos subir" on adjuntos for insert to authenticated
+  with check (
+    subio_por = auth.uid()
+    and (
+      mi_rol() in ('admin', 'agenda', 'coordinacion')
+      or (mi_rol() = 'terapeuta' and exists (
+            select 1 from citas c
+            where c.paciente_id = adjuntos.paciente_id and c.terapeuta_id = auth.uid()))
+    )
+  );
+
+-- 5) Archivos de los oficios: la carpeta es el id del usuario
+drop policy if exists "oficios leer" on storage.objects;
+create policy "oficios leer" on storage.objects for select to authenticated
+  using (
+    bucket_id = 'oficios' and (
+      mi_rol() in ('admin', 'agenda', 'coordinacion')
+      or (mi_rol() = 'terapeuta' and exists (
+            select 1 from citas c
+            where c.paciente_id::text = (storage.foldername(name))[1]
+              and c.terapeuta_id = auth.uid()))
+    )
+  );
+
+drop policy if exists "oficios subir" on storage.objects;
+create policy "oficios subir" on storage.objects for insert to authenticated
+  with check (
+    bucket_id = 'oficios' and (
+      mi_rol() in ('admin', 'agenda', 'coordinacion')
+      or (mi_rol() = 'terapeuta' and exists (
+            select 1 from citas c
+            where c.paciente_id::text = (storage.foldername(name))[1]
+              and c.terapeuta_id = auth.uid()))
+    )
+  );

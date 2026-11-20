@@ -1,0 +1,162 @@
+-- 18 · Pantalla de Personal, FASE 2 (funciones para asignar roles y administrar roles)
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: deja listas las funciones que usa la pantalla de Personal:
+--   · ver a las personas y su rol en cada módulo
+--   · cambiar el rol o activar/desactivar una persona en un módulo
+--   · crear, editar y borrar roles con sus permisos
+-- Solo el administrador puede usarlas. La base de datos revisa cada cambio, no solo la pantalla.
+-- Solo toca las tablas acceso_* (nuevas). No cambia las agendas. Se puede correr más de una vez.
+
+-- 1. Administrador = persona con rol 'administrador' activo en algún módulo.
+--    Reemplaza la versión de la fase 1 (que miraba perfiles y pl_personal).
+create or replace function es_admin_plataforma()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from acceso_persona a
+    where a.perfil_id = auth.uid() and a.rol = 'administrador' and a.activo
+  );
+$$;
+grant execute on function es_admin_plataforma() to authenticated;
+
+-- 2. Listar personal: una fila por persona y módulo (rol vacío si no tiene acceso ahí)
+create or replace function acceso_listar_personas()
+returns table (
+  perfil_id uuid,
+  nombre text,
+  correo text,
+  activo boolean,
+  modulo text,
+  orden_modulo int,
+  rol text,
+  rol_activo boolean
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.id, p.nombre, p.email, p.activo, m.codigo, m.orden, a.rol, coalesce(a.activo, false)
+  from perfiles p
+  cross join acceso_modulos m
+  left join acceso_persona a on a.perfil_id = p.id and a.modulo = m.codigo
+  where es_admin_plataforma()
+    and m.activo
+    and exists (select 1 from acceso_persona x where x.perfil_id = p.id)
+  order by p.nombre, m.orden;
+$$;
+grant execute on function acceso_listar_personas() to authenticated;
+
+-- 3. Asignar rol (o activar/desactivar) a una persona en un módulo
+create or replace function acceso_asignar_rol(
+  p_perfil uuid, p_modulo text, p_rol text, p_activo boolean default true
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not es_admin_plataforma() then
+    raise exception 'Solo el administrador puede cambiar roles.';
+  end if;
+  if not exists (select 1 from acceso_roles r where r.rol = p_rol and r.activo) then
+    raise exception 'Ese rol no existe o está desactivado.';
+  end if;
+  -- Nadie puede quitarse a sí mismo el permiso de administrar personal
+  if p_perfil = auth.uid() and (
+       not p_activo
+       or not exists (select 1 from acceso_rol_permisos rp
+                      where rp.rol = p_rol and rp.modulo = p_modulo and rp.clave = 'administrar_personal')
+     ) then
+    raise exception 'No puedes quitarte a ti mismo el permiso de administrar personal.';
+  end if;
+  insert into acceso_persona (perfil_id, modulo, rol, activo, actualizado, actualizado_por)
+  values (p_perfil, p_modulo, p_rol, p_activo, now(), auth.uid())
+  on conflict (perfil_id, modulo) do update
+    set rol = excluded.rol,
+        activo = excluded.activo,
+        actualizado = now(),
+        actualizado_por = auth.uid();
+end;
+$$;
+grant execute on function acceso_asignar_rol(uuid, text, text, boolean) to authenticated;
+
+-- 4. Crear o editar un rol con sus permisos
+--    p_permisos tiene forma: {"atencion": ["ver","crear"], "operativo": ["ver"], "reportes": []}
+create or replace function acceso_guardar_rol(p_rol text, p_nombre text, p_permisos jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  m record;
+  k text;
+begin
+  if not es_admin_plataforma() then
+    raise exception 'Solo el administrador puede administrar roles.';
+  end if;
+  if p_rol is null or p_rol !~ '^[a-z_]+$' then
+    raise exception 'El identificador del rol solo puede tener letras minúsculas y guion bajo.';
+  end if;
+  if p_nombre is null or btrim(p_nombre) = '' then
+    raise exception 'Escribe el nombre del rol.';
+  end if;
+  -- El rol Administrador siempre conserva administrar personal y roles en todos los módulos
+  if p_rol = 'administrador' then
+    for m in select codigo from acceso_modulos loop
+      if not coalesce((p_permisos -> m.codigo) ? 'administrar_personal', false)
+         or not coalesce((p_permisos -> m.codigo) ? 'administrar_roles', false) then
+        raise exception 'El rol Administrador debe conservar administrar personal y roles en todos los módulos.';
+      end if;
+    end loop;
+  end if;
+
+  insert into acceso_roles (rol, nombre, activo)
+  values (p_rol, btrim(p_nombre), true)
+  on conflict (rol) do update set nombre = excluded.nombre;
+
+  delete from acceso_rol_permisos where rol = p_rol;
+
+  for m in select key as modulo, value as claves from jsonb_each(coalesce(p_permisos, '{}'::jsonb)) loop
+    for k in select jsonb_array_elements_text(m.claves) loop
+      insert into acceso_rol_permisos (rol, modulo, clave) values (p_rol, m.modulo, k);
+    end loop;
+  end loop;
+end;
+$$;
+grant execute on function acceso_guardar_rol(text, text, jsonb) to authenticated;
+
+-- 5. Borrar un rol
+--    No se puede borrar Administrador, ni un rol que tenga personas asignadas.
+create or replace function acceso_borrar_rol(p_rol text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not es_admin_plataforma() then
+    raise exception 'Solo el administrador puede borrar roles.';
+  end if;
+  if p_rol = 'administrador' then
+    raise exception 'El rol Administrador no se puede borrar.';
+  end if;
+  if exists (select 1 from acceso_persona where rol = p_rol) then
+    raise exception 'Hay personas con este rol. Cámbialas a otro rol antes de borrarlo.';
+  end if;
+  delete from acceso_roles where rol = p_rol;
+end;
+$$;
+grant execute on function acceso_borrar_rol(text) to authenticated;
+
+-- 6. Seguridad: las tablas acceso_* NO tienen permiso de escritura directa.
+--    Todo cambio pasa por las funciones de arriba, que revisan que quien lo pide sea administrador.
+
+-- Verificación: en el SQL Editor no hay sesión de usuario, así que aquí dará false. La prueba real es desde la app.
+select es_admin_plataforma() as soy_administrador_en_esta_sesion;

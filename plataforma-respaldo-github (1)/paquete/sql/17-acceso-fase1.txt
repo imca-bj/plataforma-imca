@@ -1,0 +1,172 @@
+-- 17 · Acceso por módulo, FASE 1 (catálogo unificado de roles)
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: crea las tablas donde se guardará el rol de cada persona en cada módulo
+-- (Agenda de atención, Agenda operativo y Reportes) y los permisos de cada rol.
+-- Un solo catálogo de roles para todos los módulos. Cada persona puede tener un rol distinto en cada módulo.
+-- NO cambia las reglas de las agendas que ya funcionan ni borra datos de ellas.
+-- Solo toca las 5 tablas nuevas acceso_*. Se puede correr más de una vez.
+
+-- 0. Limpieza de la versión anterior de esta fase (solo tablas nuevas, sin datos de las agendas)
+drop table if exists acceso_persona cascade;
+drop table if exists acceso_rol_permisos cascade;
+drop table if exists acceso_permisos cascade;
+drop table if exists acceso_roles cascade;
+drop table if exists acceso_modulos cascade;
+
+-- 1. Módulos de la plataforma
+create table acceso_modulos (
+  codigo text primary key,
+  nombre text not null,
+  orden int not null default 0,
+  activo boolean not null default true
+);
+
+-- 2. Catálogo ÚNICO de roles (sirve para todos los módulos)
+create table acceso_roles (
+  rol text primary key,
+  nombre text not null,
+  orden int not null default 0,
+  activo boolean not null default true
+);
+
+-- 3. Permisos disponibles en cada módulo (qué acciones existen)
+create table acceso_permisos (
+  modulo text not null references acceso_modulos(codigo) on delete cascade,
+  clave text not null,
+  descripcion text not null,
+  orden int not null default 0,
+  primary key (modulo, clave)
+);
+
+-- 4. Qué permisos tiene cada rol en cada módulo
+create table acceso_rol_permisos (
+  rol text not null references acceso_roles(rol) on delete cascade,
+  modulo text not null,
+  clave text not null,
+  primary key (rol, modulo, clave),
+  foreign key (modulo, clave) references acceso_permisos(modulo, clave) on delete cascade
+);
+
+-- 5. Rol de cada persona en cada módulo (una fila por persona y módulo)
+create table acceso_persona (
+  perfil_id uuid not null references perfiles(id) on delete cascade,
+  modulo text not null references acceso_modulos(codigo) on delete cascade,
+  rol text not null references acceso_roles(rol),
+  activo boolean not null default true,
+  actualizado timestamptz not null default now(),
+  actualizado_por uuid references perfiles(id) on delete set null,
+  primary key (perfil_id, modulo)
+);
+
+-- Seguridad: activar RLS en todas las tablas nuevas
+alter table acceso_modulos enable row level security;
+alter table acceso_roles enable row level security;
+alter table acceso_permisos enable row level security;
+alter table acceso_rol_permisos enable row level security;
+alter table acceso_persona enable row level security;
+
+-- Función: ¿la persona que consulta es administradora de la plataforma?
+-- Es administrador si en perfiles tiene rol admin, o si en pl_personal tiene rol administrador. Ambos activos.
+create or replace function es_admin_plataforma()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from perfiles p where p.id = auth.uid() and p.rol = 'admin' and p.activo)
+      or exists (select 1 from pl_personal x where x.perfil_id = auth.uid() and x.rol = 'administrador' and x.activo);
+$$;
+grant execute on function es_admin_plataforma() to authenticated;
+
+-- Lectura de catálogos: cualquier persona con sesión puede leerlos (no contienen datos personales)
+create policy "catalogo modulos leer" on acceso_modulos for select to authenticated using (true);
+create policy "catalogo roles leer" on acceso_roles for select to authenticated using (true);
+create policy "catalogo permisos leer" on acceso_permisos for select to authenticated using (true);
+create policy "catalogo rol permisos leer" on acceso_rol_permisos for select to authenticated using (true);
+
+-- Accesos: cada persona ve su propio acceso; el administrador ve todos.
+-- Los cambios los hará el espacio de Personal (fase 2), no se escriben directo desde el sitio.
+create policy "acceso persona leer" on acceso_persona for select to authenticated
+  using (perfil_id = auth.uid() or es_admin_plataforma());
+
+-- 6. Módulos actuales
+insert into acceso_modulos (codigo, nombre, orden) values
+  ('atencion', 'Agenda de atención', 1),
+  ('operativo', 'Agenda operativo', 2),
+  ('reportes', 'Reportes', 3)
+on conflict (codigo) do nothing;
+
+-- 7. Catálogo único de roles
+--    Coordinador: Ana y Guillermo (ver, editar y borrar todo, sin personal, roles ni configuración).
+--    Administrador: tú (todo).
+--    El rol 'agenda' de la agenda de atención se convierte en Coordinador (paso 10).
+insert into acceso_roles (rol, nombre, orden) values
+  ('administrador', 'Administrador', 1),
+  ('coordinador', 'Coordinador', 2),
+  ('supervision', 'Supervisión', 3),
+  ('operativo', 'Operativo', 4),
+  ('tecnica', 'Técnica', 5),
+  ('terapeuta', 'Terapeuta', 6),
+  ('consulta', 'Consulta', 7)
+on conflict (rol) do nothing;
+
+-- 8. Permisos por módulo (mismo catálogo de acciones para los tres módulos)
+insert into acceso_permisos (modulo, clave, descripcion, orden)
+select m.codigo, p.clave, p.descripcion, p.orden
+from acceso_modulos m
+cross join (values
+  ('ver', 'Ver registros', 1),
+  ('crear', 'Crear registros', 2),
+  ('editar', 'Editar registros', 3),
+  ('borrar', 'Borrar registros', 4),
+  ('anular', 'Anular', 5),
+  ('descargar', 'Descargar archivos', 6),
+  ('ver_dashboard', 'Ver dashboard', 7),
+  ('administrar_personal', 'Administrar personal y accesos', 8),
+  ('administrar_roles', 'Crear, editar y borrar roles', 9),
+  ('configurar', 'Cambiar configuración de la app', 10)
+) as p(clave, descripcion, orden)
+on conflict (modulo, clave) do nothing;
+
+-- 9. Permisos de los roles que ya definimos
+--    Administrador: todo en todos los módulos.
+insert into acceso_rol_permisos (rol, modulo, clave)
+select 'administrador', m.codigo, p.clave
+from acceso_modulos m
+join acceso_permisos p on p.modulo = m.codigo
+on conflict do nothing;
+
+--    Coordinador: ver, crear, editar, borrar, anular, descargar y dashboard.
+--    No puede administrar personal, roles ni configuración.
+insert into acceso_rol_permisos (rol, modulo, clave)
+select 'coordinador', m.codigo, p.clave
+from acceso_modulos m
+join acceso_permisos p on p.modulo = m.codigo
+where p.clave not in ('administrar_personal', 'administrar_roles', 'configurar')
+on conflict do nothing;
+
+--    Los demás roles (supervisión, operativo, técnica, terapeuta, consulta)
+--    quedan sin permisos por ahora. Se definen en la revisión con tu aprobación.
+
+-- 10. Copiar los accesos actuales (no borra ni cambia nada de lo que ya existe)
+--     Agenda de atención: perfiles con su rol actual, con nombre de rol del catálogo único.
+insert into acceso_persona (perfil_id, modulo, rol, activo)
+select p.id, 'atencion',
+  case p.rol when 'admin' then 'administrador' when 'coordinacion' then 'coordinador' when 'agenda' then 'coordinador' else p.rol end,
+  p.activo
+from perfiles p
+where p.rol in ('admin', 'agenda', 'coordinacion', 'terapeuta', 'consulta')
+on conflict (perfil_id, modulo) do nothing;
+
+--     Agenda operativo: personal de pláticas con su rol actual (los nombres ya coinciden).
+insert into acceso_persona (perfil_id, modulo, rol, activo)
+select x.perfil_id, 'operativo', x.rol, x.activo
+from pl_personal x
+on conflict (perfil_id, modulo) do nothing;
+
+-- Verificación: debe mostrar cuántas personas quedaron en cada módulo y rol
+select modulo, rol, count(*) as personas
+from acceso_persona
+group by modulo, rol
+order by modulo, rol;

@@ -1,0 +1,16 @@
+-- 29 · Enlazar Wynne e Israel con su ficha de personal
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para que sus días de vacaciones queden ligados a su ficha, con el nombre escrito en el catálogo.
+
+update vac_personal
+set personal_id = (select id from personal_catalogo where nombre = 'Wynne Marletyy Can Can')
+where nombre = 'Wynne Marletty Can Can';
+
+update vac_personal
+set personal_id = (select id from personal_catalogo where nombre = 'Isrrael Paramo Villasana')
+where nombre = 'Israel Paramo Villasana';
+
+-- Revisión: deben salir 2 filas con personal_id lleno, si no, dime qué aparece.
+select nombre, personal_id
+from vac_personal
+where nombre in ('Wynne Marletty Can Can', 'Israel Paramo Villasana');

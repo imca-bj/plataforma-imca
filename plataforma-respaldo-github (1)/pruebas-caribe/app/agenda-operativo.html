@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F7F6F2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Agenda operativo · IMCA</title>
+<style>
+  :root {
+    --bg: var(--arena); --card: var(--tarjeta); --ink: var(--tinta-c); --muted: var(--gris-c); --line: var(--linea-c);
+    --brand: var(--turquesa); --brand-soft: var(--arena-2);
+    --ok: var(--ok); --ok-soft: var(--ok-soft);
+    --bad: var(--bad); --bad-soft: var(--bad-soft);
+    --warn: var(--warn); --warn-soft: var(--warn-soft);
+    --gris-soft: var(--arena-2); --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .oculto { display: none !important; }
+
+  header { position: sticky; top: 0; z-index: 5;
+    background: linear-gradient(135deg, var(--turquesa) 0%, var(--laguna) 70%, var(--laguna) 100%); color: #fff;
+    padding: 16px 18px 18px; display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 6px 18px rgba(44,62,80,.25); border-radius: 0 0 22px 22px; }
+  header h1 { font-size: 19px; margin: 0; font-weight: 750; letter-spacing: .2px; }
+  header h1::after { content: ""; display: block; width: 28px; height: 3px; border-radius: 2px; background: var(--coral); margin-top: 6px; }
+  header .quien { font-size: 12px; opacity: .85; text-align: right; }
+  header a, header button { background: none; border: 0; color: #fff; font-size: 12px; text-decoration: underline; padding: 0; cursor: pointer; }
+
+  main { padding: 12px 16px 104px; max-width: 760px; margin: 0 auto; }
+
+  nav.tabs { position: fixed; bottom: calc(10px + env(safe-area-inset-bottom)); left: 12px; right: 12px; z-index: 6;
+    background: rgba(255, 255, 255, .96); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 10px 28px rgba(28, 35, 33, .18);
+    display: flex; padding: 6px; gap: 2px; }
+  nav.tabs button { flex: 1; min-width: 0; border: 0; background: none; padding: 8px 2px 7px; font-size: 11px;
+    color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; border-radius: 14px; transition: background .2s, color .2s; }
+  nav.tabs button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  nav.tabs button.activo { color: #fff; background: var(--brand); font-weight: 650; box-shadow: 0 4px 12px rgba(44,62,80,.35); }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 12px;
+    box-shadow: 0 2px 10px rgba(28, 35, 33, .05); }
+  h2 { font-size: 18px; margin: 4px 0 12px; }
+  h3 { font-size: 13px; margin: 16px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+  label { display: block; font-size: 12.5px; color: var(--muted); margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--tarjeta); outline: none; font-size: 16px; }
+  input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+  textarea { min-height: 70px; resize: vertical; }
+  .fila { display: flex; gap: 10px; }
+  .fila > * { flex: 1; min-width: 0; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line);
+    background: var(--tarjeta); border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 550; text-decoration: none; color: var(--ink); }
+  .btn.pri { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .btn.bad { background: var(--tarjeta); border-color: var(--bad); color: var(--bad); }
+  .btn.wa { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .btn.full { width: 100%; padding: 13px; margin-top: 14px; }
+  .btn.sm { padding: 7px 10px; font-size: 13px; }
+  .btn:disabled { opacity: .5; }
+  .adjuntar { position: relative; overflow: hidden; margin-top: 6px; }
+  .adjuntar input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { border: 1px solid var(--line); background: var(--tarjeta); border-radius: 20px; padding: 7px 13px; font-size: 13px; cursor: pointer; transition: background .2s, color .2s; }
+  .seg button.on { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 3px 10px rgba(44,62,80,.28); }
+
+  .barra-fecha { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .barra-fecha .btn { padding: 9px 13px; }
+  .barra-fecha input { flex: 1; }
+  .titulo-dia { font-weight: 700; font-size: 17px; margin: 6px 2px 12px; color: var(--ink); }
+  .titulo-dia::before { content: ""; display: inline-block; width: 4px; height: 16px; border-radius: 2px; background: var(--coral); margin-right: 8px; vertical-align: -2px; }
+
+  .cita { display: flex; gap: 12px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line);
+    border-left: 5px solid var(--brand); border-radius: 16px; padding: 13px 14px; margin-bottom: 10px; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(28, 35, 33, .06); transition: transform .15s, box-shadow .15s; }
+  .cita:active { transform: scale(.985); }
+  .cita .hora { min-width: 56px; font-weight: 750; font-size: 17px; color: var(--brand); }
+  .cita .hora small { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; }
+  .cita .info { flex: 1; min-width: 0; }
+  .cita .nombre { font-weight: 600; }
+  .cita .meta { color: var(--muted); font-size: 13px; }
+  .cita.apagada { opacity: .55; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .chip { font-size: 11.5px; padding: 2px 8px; border-radius: 10px; background: var(--gris-soft); color: var(--muted); font-weight: 600; }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.brand { background: var(--brand-soft); color: var(--brand); }
+  .acciones { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+
+  nav.tabs button { position: relative; }
+  .badge { position: absolute; top: 4px; left: 56%; background: var(--bad); color: #fff; font-size: 10px; min-width: 17px; height: 17px;
+    border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; font-weight: 700; }
+  .grid-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .stat { background: linear-gradient(160deg, var(--tarjeta) 0%, var(--arena-2) 100%); border: 1px solid var(--line); border-radius: 18px; padding: 14px;
+    box-shadow: 0 2px 10px rgba(28, 35, 33, .05); }
+  .stat b { display: block; font-size: 28px; font-weight: 750; color: var(--brand); }
+  .stat small { color: var(--muted); font-size: 12.5px; }
+  .vacio { text-align: center; color: var(--muted); padding: 36px 10px; }
+  .nota { font-size: 12.5px; color: var(--muted); margin: 6px 0; }
+  .link { background: none; border: 0; color: var(--brand); text-decoration: underline; cursor: pointer; padding: 6px 0; font-size: 13.5px; }
+  .aviso-tel { margin-top: 10px; padding: 9px 12px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: 13.5px; }
+
+  .bloqueo { background: repeating-linear-gradient(135deg, var(--arena-2), var(--arena-2) 8px, var(--sol-suave) 8px, var(--sol-suave) 16px);
+    border: 1.5px dashed var(--sol); color: var(--warn); border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; font-size: 13.5px; }
+  .bloqueo b { display: block; font-size: 14px; }
+
+  .buscador { position: relative; margin-bottom: 10px; }
+  .buscador input { padding-left: 14px; }
+  .resultados { border: 1px solid var(--line); border-radius: 10px; margin-top: 6px; overflow: hidden; background: var(--tarjeta); }
+  .resultados button { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); background: var(--tarjeta); cursor: pointer; }
+  .resultados button:last-child { border-bottom: 0; }
+  .resultados small { color: var(--muted); }
+  .seleccion { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--brand-soft);
+    border-radius: 10px; padding: 10px 12px; margin-top: 6px; }
+  .sim { background: var(--tarjeta); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  .sim small { color: var(--muted); }
+
+  .modal-fondo { position: fixed; inset: 0; background: rgba(44,62,80,.45); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+  .modal { background: var(--bg); width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto;
+    border-radius: 18px 18px 0 0; padding: 16px 16px 28px; }
+  .modal .cerrar { float: right; border: 0; background: var(--gris-soft); border-radius: 50%; width: 32px; height: 32px; font-size: 18px; cursor: pointer; }
+
+  #toast { position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%); background: var(--tinta-c); color: #fff; padding: 10px 16px;
+    border-radius: 10px; font-size: 14px; z-index: 30; max-width: 92%; text-align: center; }
+  #toast.error { background: var(--bad); }
+  #cargando { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--brand); z-index: 40; animation: carga 1s infinite linear; transform-origin: left; }
+  @keyframes carga { 0% { transform: scaleX(.05); } 50% { transform: scaleX(.7); } 100% { transform: scaleX(1); opacity: .2; } }
+
+  /* ---------- Diseño v2 (solo presentación) ---------- */
+  html, body { background: var(--arena-2); }
+  header { position: relative; overflow: hidden;
+    background: linear-gradient(135deg, var(--turquesa) 0%, var(--laguna) 60%, var(--laguna) 100%);
+    padding: 18px 18px 22px; border-radius: 0 0 26px 26px; box-shadow: 0 10px 26px rgba(44,62,80,.30); }
+  header::before { content: ""; position: absolute; width: 220px; height: 220px; right: -70px; top: -110px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(167,123,92,.42) 0%, rgba(167,123,92,0) 70%); pointer-events: none; }
+  header::after { content: ""; position: absolute; width: 160px; height: 160px; left: -60px; bottom: -90px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.14) 0%, rgba(255,255,255,0) 70%); pointer-events: none; }
+  header h1 { font-size: 20px; font-weight: 750; position: relative; z-index: 1; }
+  header .quien { position: relative; z-index: 1; background: rgba(255,255,255,.14); border-radius: 12px; padding: 6px 10px; font-size: 12.5px; }
+
+  main { max-width: 760px; padding: 16px 16px 118px; }
+
+  nav.tabs { bottom: calc(12px + env(safe-area-inset-bottom)); left: 14px; right: 14px; border-radius: 24px;
+    background: rgba(255,255,255,.92); box-shadow: 0 14px 34px rgba(44,62,80,.22); border: 1px solid rgba(255,255,255,.7); padding: 7px; }
+  nav.tabs button { border-radius: 18px; padding: 9px 2px 8px; }
+  nav.tabs button.activo { background: linear-gradient(135deg, var(--turquesa), var(--laguna)); box-shadow: 0 6px 16px rgba(44,62,80,.38); }
+  nav.tabs button.activo svg { stroke: var(--tarjeta); }
+  nav.tabs button.activo span:first-of-type { color: #fff; }
+
+  .card { border-radius: 20px; box-shadow: 0 6px 20px rgba(44,62,80,.06); }
+  .titulo-dia { font-size: 18px; margin: 8px 4px 14px; }
+  .titulo-dia::before { width: 5px; height: 18px; background: linear-gradient(var(--coral), var(--coral)); }
+
+  .barra-fecha { background: var(--tarjeta); border-radius: 18px; padding: 8px; box-shadow: 0 6px 18px rgba(44,62,80,.06); }
+  .barra-fecha input { border: 0; background: var(--arena-2); border-radius: 12px; }
+  .barra-fecha .btn { border: 0; background: var(--arena-2); border-radius: 12px; }
+
+  .cita { position: relative; border: 0; border-left: 5px solid var(--turquesa); border-radius: 18px; padding: 14px 16px;
+    box-shadow: 0 6px 18px rgba(44,62,80,.07); transition: transform .18s ease, box-shadow .18s ease; }
+  .cita:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(44,62,80,.12); }
+  .cita:has(.chip.ok) { border-left-color: var(--ok); }
+  .cita:has(.chip.bad) { border-left-color: var(--bad); background: var(--tarjeta); }
+  .cita:has(.chip.warn) { border-left-color: var(--coral); }
+  .cita.apagada { opacity: .6; }
+  .cita .hora { min-width: 60px; font-size: 18px; font-weight: 750; color: var(--turquesa); }
+  .cita .hora small { color: var(--gris-c); font-size: 11px; }
+  .cita .nombre { font-size: 15px; }
+  .chip { border-radius: 999px; padding: 3px 10px; font-size: 11.5px; }
+  .chip.brand { background: var(--arena-2); color: var(--turquesa); }
+
+  .seg button { border-radius: 999px; padding: 8px 14px; box-shadow: 0 2px 6px rgba(44,62,80,.05); }
+  .seg button.on { background: linear-gradient(135deg, var(--turquesa), var(--laguna)); }
+  .btn { border-radius: 14px; }
+  .btn.pri { background: linear-gradient(135deg, var(--turquesa), var(--laguna)); border-color: transparent; box-shadow: 0 6px 16px rgba(44,62,80,.28); }
+  .stat { border-radius: 20px; background: linear-gradient(160deg, var(--tarjeta) 0%, var(--arena-2) 100%); }
+  .bloqueo { border-radius: 18px; }
+
+  @media (min-width: 900px) {
+    body { padding-left: 236px; }
+    header { margin-left: 0; border-radius: 0 0 22px 22px; padding: 18px 28px 20px; }
+    main { max-width: 980px; margin: 0 auto; padding: 22px 28px 40px; }
+    nav.tabs { top: 0; bottom: 0; left: 0; right: auto; width: 236px; flex-direction: column; justify-content: flex-start;
+      gap: 6px; padding: 92px 14px 24px; border-radius: 0; border: 0; background: linear-gradient(180deg, var(--laguna) 0%, var(--laguna) 100%);
+      box-shadow: none; overflow-y: auto; }
+    nav.tabs button { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 12px 14px;
+      font-size: 14.5px; color: rgba(255,255,255,.78); border-radius: 14px; position: relative; }
+    nav.tabs button svg { width: 20px; height: 20px; }
+    nav.tabs button:hover { background: rgba(255,255,255,.10); color: #fff; }
+    nav.tabs button.activo { background: rgba(255,255,255,.18); color: #fff; box-shadow: none; }
+    nav.tabs button.activo span:first-of-type { color: #fff; }
+    nav.tabs .badge { position: static; margin-left: auto; background: var(--coral); color: var(--warn); }
+    header { position: sticky; left: 0; right: 0; }
+    .card { padding: 20px; }
+  }
+
+  /* ---------- Diseño v3 (marcas, resumen, paleta IMCA) ---------- */
+  header { background: linear-gradient(120deg, var(--turquesa) 0%, var(--laguna) 70%, var(--laguna) 100%); flex-wrap: wrap; gap: 6px 14px; justify-content: flex-start; }
+  .marcas { display: flex; align-items: center; gap: 12px; background: var(--tarjeta); border-radius: 14px; padding: 6px 12px; width: 100%; box-sizing: border-box; order: -1; }
+  .marcas img { display: block; }
+  header h1 { width: 100%; }
+  header h1::after { background: var(--coral); }
+  header .quien { margin-left: auto; }
+
+  .ag-grid { display: block; }
+  .ag-side { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+  .ag-resumen { background: linear-gradient(160deg, var(--arena-2) 0%, var(--tarjeta) 100%); border-color: var(--arena-2); }
+  .ag-resumen h3, .ag-acciones h3 { margin-top: 0; color: var(--turquesa); text-transform: none; font-size: 15px; letter-spacing: 0; }
+  .ag-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .ag-stat { background: var(--tarjeta); border-radius: 16px; padding: 12px; border: 1px solid var(--line); box-shadow: 0 4px 12px rgba(44,62,80,.05); }
+  .ag-stat b { display: block; font-size: 26px; font-weight: 750; }
+  .ag-stat span { font-size: 12px; color: var(--muted); }
+  .ag-stat.verde b { color: var(--ok); }
+  .ag-stat.ambar b { color: var(--warn); }
+  .ag-stat.rojo b { color: var(--bad); }
+  .ag-stat.guinda b { color: var(--turquesa); }
+  .ag-acciones .btn { margin-top: 8px; }
+  .ag-acciones .btn.pri { background: var(--coral); border-color: var(--coral); box-shadow: 0 6px 16px rgba(167,123,92,.28); }
+
+  @media (min-width: 900px) {
+    .ag-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+    .ag-side { margin-top: 0; position: sticky; top: 110px; }
+    .marcas { width: auto; order: 0; background: transparent; padding: 0; }
+    header { padding: 12px 28px; }
+    header h1 { width: auto; }
+    header h1::after { display: none; }
+    nav.tabs { background: var(--turquesa) url("img/emblema-sol.png") no-repeat 50% 100% / 170px auto; }
+    nav.tabs button.activo { background: var(--coral); box-shadow: 0 6px 16px rgba(167,123,92,.35); }
+    nav.tabs button.activo span:first-of-type { color: #fff; }
+  }
+
+  /* ---------- Diseño v4 (ajustes finos) ---------- */
+  .pag-titulo { display: flex; align-items: center; gap: 14px; margin: 4px 2px 16px; }
+  .pag-titulo h2 { margin: 0; font-size: 22px; font-weight: 750; color: var(--turquesa); }
+  .pag-titulo p { margin: 2px 0 0; font-size: 13.5px; color: var(--muted); }
+  .pag-icono { width: 44px; height: 44px; border-radius: 14px; background: var(--arena-2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .pag-icono svg { width: 24px; height: 24px; stroke: var(--coral); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+  .ag-stat { position: relative; padding: 12px 12px 12px 12px; }
+  .ag-ico { width: 34px; height: 34px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
+  .ag-ico svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ag-stat.verde .ag-ico { background: var(--ok-soft); color: var(--ok); }
+  .ag-stat.ambar .ag-ico { background: var(--warn-soft); color: var(--warn); }
+  .ag-stat.rojo .ag-ico { background: var(--bad-soft); color: var(--bad); }
+  .ag-stat.guinda .ag-ico { background: var(--arena-2); color: var(--turquesa); }
+
+  header .marcas { background: transparent; }
+
+  @media (min-width: 900px) {
+    header { position: fixed; top: 0; left: 0; right: 0; height: 86px; z-index: 7; background: var(--tarjeta); color: var(--ink);
+      padding: 0 28px 0 18px; box-shadow: 0 2px 14px rgba(44,62,80,.08); border-radius: 0; margin: 0; }
+    header::before, header::after { display: none; }
+    header h1 { display: none; }
+    header .quien { color: var(--ink); background: var(--arena-2); }
+    header .quien a { color: var(--turquesa); }
+    .marcas { padding: 0; }
+    body { padding-top: 86px; }
+    nav.tabs { top: 86px; padding-top: 22px; background: var(--turquesa); overflow: hidden; }
+    nav.tabs::after { content: ""; position: absolute; right: -60px; bottom: -40px; width: 220px; height: 220px;
+      background: url("img/emblema-sol.png") no-repeat center / contain; opacity: .16; pointer-events: none; }
+    nav.tabs > * { position: relative; z-index: 1; }
+    main { padding-top: 26px; }
+  }
+</style>
+<style>
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin-top: 6px; }
+  .checks label { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ink); font-size: 14px; }
+  .checks input { width: auto; }
+  .fila-dato { margin: 8px 0; }
+  .fila-dato small { color: var(--muted); font-size: 12px; display: block; }
+  .g-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 36px; gap: 6px; margin-bottom: 6px; }
+  .g-row input { padding: 9px 8px; }
+  .g-row .btn { padding: 8px 0; }
+  .hora-row { display: grid; grid-template-columns: 1fr auto 1fr 36px; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .hora-row .btn { padding: 8px 0; }
+  .modal h2 { margin-top: 0; }
+  .modal .card { margin-bottom: 10px; }
+  .lista-arch { margin: 6px 0 8px; }
+  .lista-arch div { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .conv-row { display: flex; align-items: center; gap: 12px; padding: 14px 4px; border-bottom: 1px solid var(--line); font-size: 15px; cursor: pointer; }
+  .conv-row input { width: 20px; height: 20px; }
+  .card-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .kv:last-child { border-bottom: 0; }
+  .kv > span { color: var(--muted); }
+  .gcard { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin: 10px 0; }
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .stat-row .stat b { font-size: 24px; }
+  .btn.verde { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .barra-rep { position: sticky; bottom: -16px; margin: 16px -16px -28px; padding: 12px 16px; background: var(--tarjeta);
+    border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn.full { width: 100%; }
+
+  /* ---------- Ajustes de color aprobados (solo CSS) ---------- */
+  header { background: linear-gradient(160deg, var(--titulo), var(--titulo)); box-shadow: var(--sombra); }
+  header::before, header::after { display: none; }
+  header h1 { font-family: "Sora", system-ui, sans-serif; font-weight: 600; color: var(--fondo); }
+  header .quien { color: rgba(74,85,104,.75); background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; }
+  header a, header button { color: rgba(74,85,104,.75); }
+  header .marcas { display: inline-flex; width: auto; background: #fff; border-radius: 16px; padding: 8px 14px;
+    box-shadow: 0 6px 18px -8px rgba(44,62,80,.35); }
+
+  input, select, textarea { background: #fff; border: 1px solid var(--linea); border-radius: 12px; }
+  .barra-fecha { background: var(--tarjeta); border: 1px solid var(--linea); }
+  .barra-fecha input { background: #fff; border: 1px solid var(--linea); border-radius: 12px; }
+  .barra-fecha .btn { background: #fff; border: 1px solid var(--linea); border-radius: 12px; }
+
+  .seg { background: var(--gris-suave); }
+  .seg button.on { background: #fff; color: var(--titulo); box-shadow: 0 1px 2px rgba(44,62,80,.05), 0 8px 24px -12px rgba(44,62,80,.18); }
+
+  h2, .titulo-dia, .ag-resumen h3, .ag-acciones h3, .stat b, .cita .hora { color: var(--titulo); }
+
+  .card, .stat, .barra-fecha, .cita, .cita:hover, .btn, .btn.pri { box-shadow: 0 1px 2px rgba(44,62,80,.05), 0 8px 24px -12px rgba(44,62,80,.18); }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="imca-caribe.css">
+<link rel="stylesheet" href="imca-agenda.css">
+</head>
+<body>
+
+<div id="cargando" class="oculto"></div>
+<div id="toast" class="oculto"></div>
+
+<header>
+  <div class="marcas"><img class="logo-institucional" src="img/emblema-sol.png" alt="Gobierno Municipal Benito Juárez"><img class="logo-institucional" src="img/imca-logo.png" alt="IMCA"></div>
+  <h1>Agenda operativo</h1>
+  <div class="quien"><span id="h-nombre"></span><br><a href="index.html">Plataforma</a></div>
+</header>
+
+<main id="contenido"><div class="vacio">Cargando…</div></main>
+
+<nav class="tabs" id="tabs"></nav>
+<div id="modal-raiz"></div>
+<div id="sub-raiz"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+/* ---------------- Configuración y estado ---------------- */
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var S = { uid: null, yo: null, personas: [], lugares: [], cat: {}, catAll: [], tab: 'agenda',
+  fecha: '', mes: '', filtro: 'todos', lista: [], det: null, convSel: [] };
+var ESTADOS = ['Programada', 'En proceso', 'Realizada', 'Cancelada', 'No realizada'];
+var NIVELES = ['Secundaria', 'Preparatoria', 'Universidad', 'Otro'];
+var TIPOS_LUGAR = ['Secundaria', 'Preparatoria', 'Universidad', 'Centro de trabajo'];
+var ROL_TXT = { administrador: 'Administrador', coordinador: 'Coordinador', supervision: 'Supervisión', operativo: 'Operativo', tecnica: 'Técnica' };
+var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+var MAX_ARCH = 3;
+var MAX_MB = 8;
+var ICONOS = {
+  agenda: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  historial: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  dashboard: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  catalogos: '<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6H4z"/>'
+};
+
+/* ---------------- Utilidades ---------------- */
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function deFecha(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+function hoyStr() { return deFecha(new Date()); }
+function aFecha(s) { var p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+function sumarDias(s, n) { var d = aFecha(s); d.setDate(d.getDate() + n); return deFecha(d); }
+function diaLargo(s) { var d = aFecha(s); return DIAS[d.getDay()] + ' ' + d.getDate() + ' de ' + MESES[d.getMonth()] + ' de ' + d.getFullYear(); }
+function mesDe(s) { return s.slice(0, 7); }
+function rangoMes(ym) { var p = ym.split('-'); var ult = new Date(+p[0], +p[1], 0).getDate(); return { desde: ym + '-01', hasta: ym + '-' + ('0' + ult).slice(-2) }; }
+function toast(msg, error) {
+  var t = $('toast'); t.textContent = msg; t.style.background = error ? 'var(--rojo)' : 'var(--titulo)';
+  t.classList.remove('oculto'); clearTimeout(toast.t);
+  toast.t = setTimeout(function () { t.classList.add('oculto'); }, 3200);
+}
+function tryErr(e) { toast((e && e.message) || String(e), true); }
+function cargando(on) { $('cargando').classList.toggle('oculto', !on); }
+function chk(res) { if (res.error) throw new Error(res.error.message); return res.data; }
+function abrirModal(html) {
+  $('modal-raiz').innerHTML = '<div class="modal-fondo" id="m-fondo"><div class="modal">' +
+    '<button class="cerrar" id="m-cerrar" aria-label="Cerrar">×</button>' + html + '</div></div>';
+  $('m-cerrar').onclick = cerrarModal;
+  $('m-fondo').onclick = function (e) { if (e.target.id === 'm-fondo') cerrarModal(); };
+}
+function cerrarModal() { $('modal-raiz').innerHTML = ''; $('sub-raiz').innerHTML = ''; }
+
+/* ---------------- Permisos (los define pl_personal) ---------------- */
+function esAdmin() { return S.yo.rol === 'administrador'; }
+function esMando() { return ['administrador', 'coordinador', 'supervision'].indexOf(S.yo.rol) >= 0; }
+function convocadoDe(a) { return (a.pl_convocados || []).some(function (c) { return c.perfil_id === S.uid; }); }
+function repDe(a) { var r = a.pl_reportes; return Array.isArray(r) ? (r[0] || null) : (r || null); }
+function lugarDe(a) { return a.pl_lugares ? a.pl_lugares.nombre : (a.lugar_texto || 'Sin lugar'); }
+function nombresConv(a) { return (a.pl_convocados || []).map(function (c) { return c.perfiles ? c.perfiles.nombre : ''; }).filter(Boolean); }
+function estadosPermitidos(a) {
+  if (esMando()) return ESTADOS;
+  if (S.yo.rol === 'operativo' && convocadoDe(a)) return ['Realizada', 'No realizada'];
+  return [];
+}
+/* El reporte se llena desde el día de la actividad. Después de enviado, solo se edita ese mismo día. */
+function puedeReportar(a) {
+  var r = repDe(a), hoy = hoyStr();
+  if (r && r.estado === 'Anulado') return false;
+  if (a.fecha > hoy) return false;
+  if (r && r.estado === 'Enviado' && a.fecha !== hoy) return false;
+  if (esMando()) return true;
+  return S.yo.rol === 'operativo' && convocadoDe(a) && a.estado !== 'Programada' && a.estado !== 'Cancelada';
+}
+
+/* ---------------- Carga de datos ---------------- */
+var ACT_SEL = '*, pl_lugares(nombre, nivel, clave), pl_convocados(perfil_id, perfiles(nombre)), ' +
+  'pl_reportes(folio, estado, num_platicas, grupos, hay_incidencia, observaciones, enviado, elaboro, creado)';
+
+async function cargarBase() {
+  var s = await sb.auth.getSession();
+  if (!s.data.session) { location.replace('index.html'); return false; }
+  S.uid = s.data.session.user.id;
+  var y = await sb.from('pl_personal')
+    .select('perfil_id, rol, convocable, ve_dashboard, puede_anular, puede_descargar, correo_calendario, activo, perfiles(nombre)')
+    .eq('perfil_id', S.uid).maybeSingle();
+  if (y.error || !y.data || !y.data.activo) { location.replace('index.html'); return false; }
+  S.yo = y.data;
+  S.yo.nombre = y.data.perfiles ? y.data.perfiles.nombre : '';
+  var pers = chk(await sb.from('pl_personal').select('perfil_id, rol, convocable, perfiles(nombre)').eq('activo', true)) || [];
+  S.personas = pers.map(function (p) {
+    return { id: p.perfil_id, rol: p.rol, convocable: p.convocable, nombre: p.perfiles ? p.perfiles.nombre : '' };
+  }).sort(function (a, b) { return a.nombre.localeCompare(b.nombre, 'es'); });
+  S.lugares = chk(await sb.from('pl_lugares').select('id, nivel, nombre').eq('activa', true).order('nombre')) || [];
+  var cat = chk(await sb.from('pl_catalogo').select('tipo, valor, orden, activo').order('orden')) || [];
+  S.cat = {};
+  cat.forEach(function (c) { if (c.activo) (S.cat[c.tipo] = S.cat[c.tipo] || []).push(c.valor); });
+  return true;
+}
+
+async function cargarActs(desde, hasta) {
+  var lista = chk(await sb.from('pl_actividades').select(ACT_SEL).gte('fecha', desde).lte('fecha', hasta).order('fecha')) || [];
+  lista.sort(function (a, b) {
+    var ka = a.fecha + (a.horarios[0] || ''), kb = b.fecha + (b.horarios[0] || '');
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+  return lista;
+}
+
+/* ---------------- Tarjetas ---------------- */
+function chipEstado(e) {
+  var c = e === 'Realizada' ? 'ok' : (e === 'Cancelada' || e === 'No realizada') ? 'bad' : e === 'En proceso' ? 'warn' : 'brand';
+  return '<span class="chip ' + c + '">' + esc(e) + '</span>';
+}
+function chipRep(r) {
+  if (!r) return '<span class="chip">Sin reporte</span>';
+  var c = r.estado === 'Enviado' ? 'ok' : r.estado === 'Anulado' ? 'bad' : 'warn';
+  return '<span class="chip ' + c + '">Reporte: ' + esc(r.estado) + '</span>';
+}
+function tarjetaAct(a) {
+  var horas = (a.horarios || []).join(' · ') || 'Sin horario';
+  return '<button class="cita" data-id="' + esc(a.id) + '"><div class="hora" style="min-width:96px;font-size:14px">' + esc(horas) +
+    '</div><div class="info"><div class="nombre">' + esc(a.clase) + ' · ' + esc(a.tema || a.tipo_evento || 'Sin tema') + '</div>' +
+    '<div class="meta">' + esc(lugarDe(a)) + '</div>' +
+    '<div class="meta" style="margin-top:4px">Convocados: ' + esc(nombresConv(a).join(', ') || 'nadie') + '</div>' +
+    '<div class="chips">' + chipEstado(a.estado) + chipRep(repDe(a)) +
+    '<span class="chip">' + (a.pl_convocados || []).length + ' convocados</span></div></div></button>';
+}
+function enlazarCitas(el) {
+  el.onclick = function (e) {
+    var b = e.target.closest('.cita');
+    if (b) abrirDetalle(b.getAttribute('data-id'), 'datos');
+  };
+}
+
+/* ---------------- Agenda (por día) ---------------- */
+function pintarLista() {
+  var mio = S.filtro === 'mias';
+  var lista = S.lista.filter(function (a) { return !mio || convocadoDe(a) || a.programo === S.uid; });
+  $('lista').innerHTML = lista.length ? lista.map(tarjetaAct).join('') :
+    '<div class="vacio">' + (mio ? 'No tienes pláticas ni eventos este día.' : 'No hay pláticas ni eventos este día.') + '</div>';
+}
+
+async function vAgenda() {
+  $('contenido').innerHTML =
+    '<div class="barra-fecha"><button class="btn" id="d-ant" aria-label="Día anterior">‹</button>' +
+    '<input type="date" id="d-fecha" value="' + S.fecha + '"><button class="btn" id="d-sig" aria-label="Día siguiente">›</button>' +
+    '<button class="btn" id="d-hoy">Hoy</button></div>' +
+    '<div class="seg" style="margin-bottom:12px"><button data-f="todos" class="' + (S.filtro === 'todos' ? 'on' : '') + '">Todo el equipo</button>' +
+    '<button data-f="mias" class="' + (S.filtro === 'mias' ? 'on' : '') + '">Solo las mías</button></div>' +
+    (esMando() ? '<button class="btn pri full" id="btn-nueva" style="margin:0 0 12px">+ Programar plática o evento</button>' : '') +
+    '<div class="titulo-dia">' + diaLargo(S.fecha) + '</div><div id="lista"></div>';
+  $('d-ant').onclick = function () { S.fecha = sumarDias(S.fecha, -1); vAgenda(); };
+  $('d-sig').onclick = function () { S.fecha = sumarDias(S.fecha, 1); vAgenda(); };
+  $('d-hoy').onclick = function () { S.fecha = hoyStr(); vAgenda(); };
+  $('d-fecha').onchange = function () { if (this.value) { S.fecha = this.value; vAgenda(); } };
+  Array.prototype.forEach.call(document.querySelectorAll('#contenido .seg button'), function (b) {
+    b.onclick = function () { S.filtro = b.getAttribute('data-f'); vAgenda(); };
+  });
+  if ($('btn-nueva')) $('btn-nueva').onclick = function () { abrirForm(null); };
+  enlazarCitas($('contenido'));
+  cargando(true);
+  try {
+    S.lista = await cargarActs(S.fecha, S.fecha);
+    pintarLista();
+  } catch (e) { tryErr(e); } finally { cargando(false); }
+}
+
+/* ---------------- Historial (por mes) ---------------- */
+async function vHistorial() {
+  if (!S.mes) S.mes = mesDe(hoyStr());
+  $('contenido').innerHTML = '<h2>Historial</h2>' +
+    '<div class="barra-fecha"><input type="month" id="h-mes" value="' + S.mes + '"></div>' +
+    (S.yo.puede_descargar ? '<button class="btn full" id="h-csv" style="margin:0 0 12px">Descargar reportes del mes (CSV)</button>' : '') +
+    '<div id="lista"></div>';
+  $('h-mes').onchange = function () { if (this.value) { S.mes = this.value; vHistorial(); } };
+  enlazarCitas($('contenido'));
+  cargando(true);
+  try {
+    var r = rangoMes(S.mes);
+    S.lista = await cargarActs(r.desde, r.hasta);
+    $('lista').innerHTML = S.lista.length ? S.lista.map(tarjetaAct).join('') :
+      '<div class="vacio">Sin pláticas ni eventos en este mes.</div>';
+    if ($('h-csv')) $('h-csv').onclick = function () { descargarCSV(S.lista); };
+  } catch (e) { tryErr(e); } finally { cargando(false); }
+}
+
+function filaCSV(a, g) {
+  var r = repDe(a) || {};
+  return [r.folio || '', a.fecha, a.clase, lugarDe(a), a.tema || a.tipo_evento || '', a.estado, r.estado || '', r.num_platicas || '',
+    g ? ((g.grado || '') + ' ' + (g.grupo || '')).trim() : '', g ? g.hombres : '', g ? g.mujeres : '', r.hay_incidencia || ''];
+}
+function descargarCSV(acts) {
+  var filas = [['Folio', 'Fecha', 'Clase', 'Lugar', 'Tema', 'Estado', 'Reporte', 'Pláticas', 'Grupo', 'Hombres', 'Mujeres', 'Incidencia']];
+  acts.forEach(function (a) {
+    var gs = (repDe(a) || {}).grupos || [];
+    if (gs.length) gs.forEach(function (g) { filas.push(filaCSV(a, g)); });
+    else filas.push(filaCSV(a, null));
+  });
+  var csv = filas.map(function (f) {
+    return f.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(',');
+  }).join('\r\n');
+  var url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+  var x = document.createElement('a');
+  x.href = url; x.download = 'reportes-pla-' + S.mes + '.csv';
+  document.body.appendChild(x); x.click(); x.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------------- Dashboard (solo quien tiene ve_dashboard) ---------------- */
+async function vDashboard() {
+  if (!S.mes) S.mes = mesDe(hoyStr());
+  $('contenido').innerHTML = '<h2>Dashboard</h2>' +
+    '<div class="barra-fecha"><input type="month" id="h-mes" value="' + S.mes + '"></div><div id="dash"></div>';
+  $('h-mes').onchange = function () { if (this.value) { S.mes = this.value; vDashboard(); } };
+  cargando(true);
+  try {
+    var r = rangoMes(S.mes);
+    var acts = await cargarActs(r.desde, r.hasta);
+    var c = { pl: 0, ev: 0, real: 0, noreal: 0, canc: 0, repEnv: 0, grupos: 0, h: 0, m: 0, inc: 0 };
+    var temas = {};
+    acts.forEach(function (a) {
+      if (a.clase === 'Plática') c.pl++; else c.ev++;
+      if (a.estado === 'Realizada') c.real++;
+      if (a.estado === 'No realizada') c.noreal++;
+      if (a.estado === 'Cancelada') c.canc++;
+      var t = a.tema || a.tipo_evento || 'Sin tema'; temas[t] = (temas[t] || 0) + 1;
+      var rp = repDe(a);
+      if (rp && rp.estado === 'Enviado') {
+        c.repEnv++;
+        if (rp.hay_incidencia === 'Sí') c.inc++;
+        (rp.grupos || []).forEach(function (g) { c.grupos++; c.h += (+g.hombres || 0); c.m += (+g.mujeres || 0); });
+      }
+    });
+    var stat = function (v, t) { return '<div class="stat"><b>' + v + '</b><small>' + t + '</small></div>'; };
+    var filasTema = Object.keys(temas).sort(function (a, b) { return temas[b] - temas[a]; }).map(function (t) {
+      return '<div class="fila-dato" style="display:flex;justify-content:space-between"><span>' + esc(t) + '</span><b>' + temas[t] + '</b></div>';
+    }).join('') || '<p class="nota">Sin actividades en este mes.</p>';
+    $('dash').innerHTML =
+      '<div class="grid-stats">' + stat(c.pl, 'Pláticas') + stat(c.ev, 'Eventos') + stat(c.real, 'Realizadas') +
+      stat(c.noreal + c.canc, 'No realizadas o canceladas') + stat(c.repEnv, 'Reportes enviados') + stat(c.inc, 'Con incidencia') +
+      stat(c.h + c.m, 'Personas atendidas') + stat(c.grupos, 'Grupos atendidos') + '</div>' +
+      '<div class="grid-stats" style="margin-top:0"><div class="stat"><small>Hombres</small><b>' + c.h + '</b></div>' +
+      '<div class="stat"><small>Mujeres</small><b>' + c.m + '</b></div></div>' +
+      '<div class="card" style="margin-top:12px"><h3 style="margin-top:0">Por tema o tipo de evento</h3>' + filasTema + '</div>';
+  } catch (e) { tryErr(e); } finally { cargando(false); }
+}
+
+/* ---------------- Catálogos (solo administrador) ---------------- */
+async function vCatalogos() {
+  cargando(true);
+  try {
+    S.catAll = chk(await sb.from('pl_catalogo').select('tipo, valor, orden, activo').order('orden')) || [];
+    var lug = chk(await sb.from('pl_lugares').select('id, nivel, nombre, activa').order('nombre')) || [];
+    var tipos = [['tema', 'Temas de plática'], ['tipo_evento', 'Tipos de evento'], ['turno', 'Turnos'], ['publico', '¿A quién se le dará?'],
+      ['como_se_da', '¿Cómo se darán las pláticas?'], ['que_llevar', 'Qué llevar']];
+    var html = '<h2>Catálogos</h2>';
+    tipos.forEach(function (t) {
+      var items = S.catAll.filter(function (c) { return c.tipo === t[0]; });
+      html += '<div class="card"><h3 style="margin-top:0">' + t[1] + '</h3><div class="chips">' +
+        items.map(function (c) {
+          return '<button class="chip ' + (c.activo ? 'brand' : '') + ' cat-t" data-tipo="' + t[0] + '" data-valor="' + esc(c.valor) +
+            '" data-act="' + (c.activo ? '1' : '0') + '" style="border:0;cursor:pointer">' + esc(c.valor) + (c.activo ? '' : ' (oculto)') + '</button>';
+        }).join('') + '</div>' +
+        '<div class="fila" style="margin-top:10px"><input id="cat-in-' + t[0] + '" placeholder="Agregar…"><button class="btn sm cat-add" data-tipo="' + t[0] + '">Agregar</button></div></div>';
+    });
+    var activos = lug.filter(function (l) { return l.activa; }).length;
+    html += '<div class="card"><h3 style="margin-top:0">Escuelas y lugares (' + activos + ')</h3>' +
+      '<div class="fila"><select id="lu-nivel">' + NIVELES.map(function (n) { return '<option>' + n + '</option>'; }).join('') + '</select>' +
+      '<input id="lu-nombre" placeholder="Nombre de la escuela"></div>' +
+      '<button class="btn sm" id="lu-add" style="margin-top:8px">Agregar escuela</button>' +
+      '<p class="nota">La carga completa de escuelas de Cancún se hace desde el Excel.</p></div>';
+    $('contenido').innerHTML = html;
+    Array.prototype.forEach.call(document.querySelectorAll('.cat-t'), function (b) {
+      b.onclick = async function () {
+        cargando(true);
+        try {
+          chk(await sb.from('pl_catalogo').update({ activo: b.getAttribute('data-act') !== '1' })
+            .eq('tipo', b.getAttribute('data-tipo')).eq('valor', b.getAttribute('data-valor')));
+          vCatalogos();
+        } catch (e) { tryErr(e); cargando(false); }
+      };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.cat-add'), function (b) {
+      b.onclick = async function () {
+        var tipo = b.getAttribute('data-tipo');
+        var valor = $('cat-in-' + tipo).value.trim();
+        if (!valor) return toast('Escribe el valor.', true);
+        cargando(true);
+        try {
+          chk(await sb.from('pl_catalogo').insert({ tipo: tipo, valor: valor, orden: 999, activo: true }));
+          vCatalogos();
+        } catch (e) { tryErr(e); cargando(false); }
+      };
+    });
+    $('lu-add').onclick = async function () {
+      var nombre = $('lu-nombre').value.trim();
+      if (!nombre) return toast('Escribe el nombre.', true);
+      cargando(true);
+      try {
+        chk(await sb.from('pl_lugares').insert({ nivel: $('lu-nivel').value, nombre: nombre }));
+        vCatalogos();
+      } catch (e) { tryErr(e); cargando(false); }
+    };
+  } catch (e) { tryErr(e); } finally { cargando(false); }
+}
+
+/* ---------------- Programar / editar plática o evento ---------------- */
+function opts(tipo, sel) {
+  return '<option value="">Elige…</option>' + (S.cat[tipo] || []).map(function (x) {
+    return '<option value="' + esc(x) + '"' + (x === sel ? ' selected' : '') + '>' + esc(x) + '</option>';
+  }).join('');
+}
+function filaHora(de, a) {
+  return '<div class="hora-row"><input type="time" class="h-de" value="' + (de || '') + '"><span>a</span>' +
+    '<input type="time" class="h-a" value="' + (a || '') + '"><button class="btn sm h-quitar" type="button">×</button></div>';
+}
+function checks(id, lista, marcados) {
+  return '<div class="checks" id="' + id + '">' + lista.map(function (x) {
+    return '<label><input type="checkbox" value="' + esc(x) + '"' + ((marcados || []).indexOf(x) >= 0 ? ' checked' : '') + '>' + esc(x) + '</label>';
+  }).join('') + '</div>';
+}
+function radios(id, lista, marcados) {
+  return '<div class="checks" id="' + id + '">' + lista.map(function (x) {
+    return '<label><input type="radio" name="' + id + '" value="' + esc(x) + '"' + ((marcados || []).indexOf(x) >= 0 ? ' checked' : '') + '>' + esc(x) + '</label>';
+  }).join('') + '</div>';
+}
+function cajaLugar(tipo, valor) {
+  if (tipo === 'Centro de trabajo') {
+    return '<label>Centro de trabajo</label><input id="f-lugar" placeholder="Escribe el nombre del centro de trabajo" value="' + esc(valor || '') + '">';
+  }
+  if (tipo) {
+    var lista = S.lugares.filter(function (l) { return l.nivel === tipo; });
+    var aviso = lista.length ? '' : '<p class="nota">Todavía no hay lista de este nivel. Escribe el nombre a mano.</p>';
+    return '<label>' + tipo + '</label>' + aviso + '<input id="f-lugar" list="dl-lugares" placeholder="Escribe las primeras letras de la escuela" value="' + esc(valor || '') + '">' +
+      '<datalist id="dl-lugares">' + lista.map(function (l) { return '<option value="' + esc(l.nombre) + '"></option>'; }).join('') + '</datalist>';
+  }
+  return '';
+}
+
+function abrirForm(a) {
+  var v = a || { clase: 'Plática', fecha: S.fecha, horarios: [], estado: 'Programada', que_llevar: [], como_se_da: [], pl_convocados: [] };
+  S.convSel = (v.pl_convocados || []).map(function (c) { return c.perfil_id; });
+  var tipoL = TIPOS_LUGAR.indexOf(v.tipo_lugar) >= 0 ? v.tipo_lugar : '';
+  var valorL = v.pl_lugares ? v.pl_lugares.nombre : (v.lugar_texto || '');
+  var horas = (v.horarios && v.horarios.length) ? v.horarios : ['-'];
+  var html = '<h2>' + (a ? 'Editar' : 'Programar') + ' plática o evento</h2>' +
+    '<div class="card"><label>Clase</label><select id="f-clase">' +
+      ['Plática', 'Evento'].map(function (x) { return '<option' + (x === v.clase ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>' +
+    '<label>Fecha</label><input type="date" id="f-fecha" value="' + (v.fecha || S.fecha) + '">' +
+    '<h3>Horario</h3><div id="f-horas">' + horas.map(function (h) {
+      var p = h.split('-'); return filaHora(p[0], p[1]);
+    }).join('') + '</div>' +
+    '<button class="btn sm" id="f-addhora" type="button">+ Agregar horario</button>' +
+    '<p class="nota">Si es horario partido (por ejemplo de 10 a 11 y de 2 a 3), agrega otro.</p>' +
+
+    '<div id="f-bloque-plat">' +
+      '<label>Tipo de lugar</label><select id="f-tipolugar"><option value="">Elige el tipo</option>' +
+        TIPOS_LUGAR.map(function (t) { return '<option' + (t === tipoL ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select>' +
+      '<div id="f-lugarbox">' + cajaLugar(tipoL, valorL) + '</div>' +
+      '<label>Turno</label><select id="f-turno">' + opts('turno', v.turno) + '</select>' +
+      '<label>¿A quién se le dará?</label><select id="f-publico">' + opts('publico', v.publico) + '</select>' +
+      '<label>Plática</label><select id="f-tema">' + opts('tema', v.tema) + '</select>' +
+      '<label>Grupos esperados</label><input type="number" min="0" id="f-grupos" value="' + (v.grupos_esperados || '') + '">' +
+      '<label>Supermanzana</label><input id="f-sm" value="' + esc(v.supermanzana || '') + '">' +
+      '<label>Colonia</label><input id="f-colonia" value="' + esc(v.colonia || '') + '">' +
+      '<h3>¿Cómo se darán las pláticas?</h3>' + radios('f-como', S.cat.como_se_da || [], v.como_se_da || []) +
+    '</div>' +
+
+    '<div id="f-bloque-ev">' +
+      '<label>Tipo de evento</label><select id="f-tipo_evento">' + opts('tipo_evento', v.tipo_evento) + '</select>' +
+      '<label>Lugar del evento</label><input id="f-lugar-ev" placeholder="Ej. Hotel Riu Caribe, lobby" value="' + esc(a && a.clase === 'Evento' ? valorL : '') + '">' +
+    '</div>' +
+
+    '<label>Ubicación: enlace de Google Maps</label><input id="f-mapa" type="url" placeholder="Pega aquí el enlace de Google Maps" value="' + esc(v.mapa_url || '') + '">' +
+    '<h3>Qué llevar</h3>' + checks('f-llevar', S.cat.que_llevar || [], v.que_llevar || []) +
+    '<h3>Contacto en el lugar (opcional)</h3>' +
+    '<input id="f-cnombre" placeholder="Nombre" value="' + esc(v.contacto_nombre || '') + '" style="margin-bottom:8px">' +
+    '<input id="f-cpuesto" placeholder="Puesto" value="' + esc(v.contacto_puesto || '') + '" style="margin-bottom:8px">' +
+    '<input id="f-ctel" placeholder="Teléfono" value="' + esc(v.contacto_telefono || '') + '">' +
+    '<label>Notas (opcional)</label><textarea id="f-notas" placeholder="Ej. preguntar por la subdirectora">' + esc(v.notas || '') + '</textarea>' +
+    (a ? '<label>Estado</label><select id="f-estado">' + ESTADOS.map(function (e) { return '<option' + (e === a.estado ? ' selected' : '') + '>' + e + '</option>'; }).join('') + '</select>' : '') +
+    '</div>' +
+    '<div class="card"><h3 style="margin-top:0">Convocados</h3><p id="f-conv-txt" class="nota"></p>' +
+    '<button class="btn full" id="f-conv-btn" type="button">Seleccionar convocados</button></div>' +
+    '<button class="btn pri full" id="f-guardar">Guardar</button>';
+  abrirModal(html);
+  pintarConvTexto();
+  aplicarClase();
+  $('f-clase').onchange = aplicarClase;
+  $('f-addhora').onclick = function () { $('f-horas').insertAdjacentHTML('beforeend', filaHora('', '')); };
+  $('f-horas').onclick = function (e) { if (e.target.classList.contains('h-quitar')) e.target.closest('.hora-row').remove(); };
+  $('f-tipolugar').onchange = function () { $('f-lugarbox').innerHTML = cajaLugar(this.value, ''); };
+  $('f-conv-btn').onclick = abrirConvocados;
+  $('f-guardar').onclick = function () { guardarActividad(a ? a.id : null); };
+}
+
+function aplicarClase() {
+  var ev = $('f-clase').value === 'Evento';
+  $('f-bloque-plat').style.display = ev ? 'none' : '';
+  $('f-bloque-ev').style.display = ev ? '' : 'none';
+}
+
+function pintarConvTexto() {
+  var nombres = S.personas.filter(function (p) { return S.convSel.indexOf(p.id) >= 0; }).map(function (p) { return p.nombre; });
+  $('f-conv-txt').textContent = nombres.length ? nombres.join(', ') : 'Nadie convocado todavía.';
+}
+
+function abrirConvocados() {
+  var lista = S.personas.filter(function (p) { return p.convocable; });
+  $('sub-raiz').innerHTML = '<div class="modal-fondo" id="sub-fondo" style="z-index:30"><div class="modal">' +
+    '<button class="cerrar" id="sub-cerrar" aria-label="Cerrar">×</button><h2>Convocados</h2>' +
+    '<button class="btn full" id="sub-todos" style="margin:0 0 12px">Seleccionar todos</button>' +
+    lista.map(function (p) {
+      return '<label class="conv-row"><input type="checkbox" value="' + p.id + '"' + (S.convSel.indexOf(p.id) >= 0 ? ' checked' : '') + '>' + esc(p.nombre) + '</label>';
+    }).join('') +
+    '<button class="btn pri full" id="sub-listo">Listo</button></div></div>';
+  var marcar = function (val) {
+    Array.prototype.forEach.call(document.querySelectorAll('#sub-fondo .conv-row input'), function (i) { i.checked = val; });
+  };
+  $('sub-todos').onclick = function () { marcar(true); };
+  $('sub-cerrar').onclick = function () { $('sub-raiz').innerHTML = ''; };
+  $('sub-listo').onclick = function () {
+    S.convSel = Array.prototype.map.call(document.querySelectorAll('#sub-fondo .conv-row input:checked'), function (i) { return i.value; });
+    $('sub-raiz').innerHTML = '';
+    pintarConvTexto();
+  };
+}
+
+function leerForm() {
+  var ev = $('f-clase').value === 'Evento';
+  var clase = ev ? 'Evento' : 'Plática';
+  var fecha = $('f-fecha').value;
+  if (!fecha) throw new Error('Falta la fecha.');
+  var horas = Array.prototype.map.call(document.querySelectorAll('#f-horas .hora-row'), function (row) {
+    return { de: row.querySelector('.h-de').value, a: row.querySelector('.h-a').value };
+  }).filter(function (h) { return h.de || h.a; });
+  if (!horas.length) throw new Error('Falta el horario.');
+  horas.forEach(function (h) {
+    if (!h.de || !h.a) throw new Error('Completa las dos horas de cada horario.');
+    if (h.a <= h.de) throw new Error('La hora final debe ser después de la inicial (' + h.de + ' a ' + h.a + ').');
+  });
+  var mapa = $('f-mapa').value.trim();
+  if (mapa && !/^https?:\/\//.test(mapa)) throw new Error('El enlace de Google Maps debe empezar con https://');
+  if (!S.convSel.length) throw new Error('Elige al menos un convocado.');
+  var marcados = function (id) {
+    return Array.prototype.map.call(document.querySelectorAll('#' + id + ' input:checked'), function (i) { return i.value; });
+  };
+  var datos = {
+    clase: clase, fecha: fecha,
+    horarios: horas.map(function (h) { return h.de + '-' + h.a; }),
+    mapa_url: mapa || null, que_llevar: marcados('f-llevar'),
+    contacto_nombre: $('f-cnombre').value.trim() || null,
+    contacto_puesto: $('f-cpuesto').value.trim() || null,
+    contacto_telefono: $('f-ctel').value.trim() || null,
+    notas: $('f-notas').value.trim() || null,
+    ubicacion: null, lugar_id: null, lugar_texto: null, tipo_lugar: null, turno: null, publico: null, tema: null,
+    tipo_evento: null, grupos_esperados: null, como_se_da: [], supermanzana: null, colonia: null
+  };
+  if (ev) {
+    var tipoEv = $('f-tipo_evento').value;
+    if (!tipoEv) throw new Error('Elige el tipo de evento.');
+    var lugarEv = $('f-lugar-ev').value.trim();
+    if (!lugarEv) throw new Error('Falta el lugar del evento.');
+    datos.tipo_evento = tipoEv;
+    datos.lugar_texto = lugarEv;
+    return datos;
+  }
+  var tipo = $('f-tipolugar').value;
+  if (!tipo) throw new Error('Elige el tipo de lugar.');
+  var txt = ($('f-lugar') ? $('f-lugar').value : '').trim();
+  if (!txt) throw new Error('Falta el lugar.');
+  var lug = null;
+  var hayLista = S.lugares.some(function (l) { return l.nivel === tipo; });
+  if (tipo !== 'Centro de trabajo' && hayLista) {
+    lug = S.lugares.filter(function (l) { return l.nivel === tipo && l.nombre === txt; })[0];
+    if (!lug) throw new Error('Elige una escuela de la lista de ' + tipo + '.');
+  }
+  var turno = $('f-turno').value, publico = $('f-publico').value, tema = $('f-tema').value;
+  if (!turno || !publico || !tema) throw new Error('Falta turno, a quién se le dará o la plática.');
+  datos.turno = turno; datos.publico = publico; datos.tema = tema;
+  datos.lugar_id = lug ? lug.id : null;
+  datos.lugar_texto = lug ? null : txt;
+  datos.tipo_lugar = tipo;
+  datos.grupos_esperados = parseInt($('f-grupos').value, 10) || null;
+  datos.como_se_da = marcados('f-como');
+  datos.supermanzana = $('f-sm').value.trim() || null;
+  datos.colonia = $('f-colonia').value.trim() || null;
+  return datos;
+}
+
+async function guardarActividad(id) {
+  var datos;
+  try { datos = leerForm(); } catch (e) { return tryErr(e); }
+  if (!id) { datos.programo = S.uid; datos.estado = 'Programada'; }
+  else { datos.estado = $('f-estado').value; }
+  cargando(true);
+  try {
+    var act = id
+      ? chk(await sb.from('pl_actividades').update(datos).eq('id', id).select().single())
+      : chk(await sb.from('pl_actividades').insert(datos).select().single());
+    chk(await sb.from('pl_convocados').delete().eq('actividad_id', act.id));
+    chk(await sb.from('pl_convocados').insert(S.convSel.map(function (p) { return { actividad_id: act.id, perfil_id: p }; })));
+    cerrarModal();
+    toast('Guardado');
+    irA(S.tab);
+  } catch (e) { tryErr(e); } finally { cargando(false); }
+}
+
+/* ---------------- Detalle de la actividad ---------------- */
+async function abrirDetalle(id, vista) {
+  cargando(true);
+  try {
+    var a = chk(await sb.from('pl_actividades').select(ACT_SEL).eq('id', id).single());
+    var arch = chk(await sb.from('pl_archivos').select('id, tipo, nombre, ruta').eq('actividad_id', id).order('creado')) || [];
+    S.det = { a: a, arch: arch, vista: vista || 'datos' };
+    pintarDetalle();
+  } catch (e) { tryErr(e); } finally { cargando(false); }
+}
+
+function fila(l, v) { return '<div class="fila-dato"><small>' + l + '</small><div>' + (esc(v) || '—') + '</div></div>'; }
+
+function pintarDetalle() {
+  if (S.det.vista === 'reporte') return pintarReporte();
+  var a = S.det.a, rep = repDe(a), permitidos = estadosPermitidos(a);
+  var ev = a.clase === 'Evento';
+  var html = '<h2>' + esc(a.clase) + ' · ' + esc(a.tema || a.tipo_evento || 'Sin tema') + '</h2>' +
+    '<div class="chips" style="margin-bottom:10px">' + chipEstado(a.estado) + chipRep(rep) + '</div>' +
+    '<div class="card">' + fila('Fecha', diaLargo(a.fecha)) + fila('Horarios', (a.horarios || []).join(' · ')) +
+    (ev ? fila('Tipo de evento', a.tipo_evento) : fila('Tipo de lugar', a.tipo_lugar) + fila('Lugar', lugarDe(a)) +
+      fila('Supermanzana', a.supermanzana) + fila('Colonia', a.colonia) + fila('Turno', a.turno) +
+      fila('¿A quién se le dará?', a.publico) + fila('Plática', a.tema) + fila('Cómo se darán', (a.como_se_da || []).join(', ')) +
+      fila('Grupos esperados', a.grupos_esperados)) +
+    (ev ? fila('Lugar del evento', lugarDe(a)) : '') +
+    (a.mapa_url ? '<div class="fila-dato"><a class="link" href="' + esc(a.mapa_url) + '" target="_blank" rel="noopener">Abrir en Google Maps</a></div>' : '') +
+    fila('Qué llevar', (a.que_llevar || []).join(', ')) +
+    fila('Contacto', [a.contacto_nombre, a.contacto_puesto, a.contacto_telefono].filter(Boolean).join(' · ')) +
+    fila('Notas', a.notas) + '</div>' +
+    '<div class="card"><h3 style="margin-top:0">Convocados</h3><p>' + (nombresConv(a).map(esc).join(', ') || 'Nadie convocado') + '</p></div>';
+  if (permitidos.length) {
+    html += '<div class="card"><h3 style="margin-top:0">Estado</h3><div class="seg" id="d-estado">' +
+      permitidos.map(function (e) { return '<button data-e="' + e + '" class="' + (a.estado === e ? 'on' : '') + '">' + e + '</button>'; }).join('') +
+      '</div></div>';
+  }
+  html += '<div class="acciones">' + (esMando() ? '<button class="btn sm" id="d-editar">Editar</button>' : '') +
+    (esAdmin() ? '<button class="btn sm bad" id="d-borrar">Eliminar</button>' : '') + '</div>';
+  html += bloqueReporte(a, rep);
+  abrirModal(html);
+  Array.prototype.forEach.call(document.querySelectorAll('#d-estado button'), function (b) {
+    b.onclick = function () { cambiarEstado(a.id, b.getAttribute('data-e')); };
+  });
+  if ($('d-editar')) $('d-editar').onclick = function () { abrirForm(a); };
+  if ($('d-borrar')) $('d-borrar').onclick = function () { borrarActividad(a.id); };
+  if ($('d-reporte')) $('d-reporte').onclick = function () { S.det.vista = 'reporte'; pintarDetalle(); };
+}
+
+/* Bloque de reporte dentro de los datos: solo el botón o un resumen */
+function bloqueReporte(a, rep) {
+  if (rep && rep.estado === 'Anulado') return '<div class="card"><h3 style="margin-top:0">Reporte</h3><p>Reporte anulado.</p></div>';
+  if (a.fecha > hoyStr()) return '<div class="card"><p class="nota">El reporte se llena a partir del día de la actividad.</p></div>';
+  if (puedeReportar(a)) {
+    return '<button class="btn pri full" id="d-reporte">' + (rep ? 'Continuar reporte' : 'Generar reporte') + '</button>';
+  }
+  return rep ? '<div class="card"><h3 style="margin-top:0">Reporte ' + esc(rep.folio) + '</h3>' + resumenRep(rep) + '</div>' : '';
+}
+
+/* ---------------- Reporte (pantalla propia) ---------------- */
+function kv(l, v) { return '<div class="kv"><span>' + l + '</span><div>' + (v || '—') + '</div></div>'; }
+function nombreDe(id) { var p = S.personas.filter(function (x) { return x.id === id; })[0]; return p ? p.nombre : '—'; }
+function fechaCorta(s) { var d = aFecha(s); return d.getDate() + ' ' + MESES[d.getMonth()].slice(0, 3) + ' ' + d.getFullYear(); }
+function fechaHora(iso) {
+  var d = new Date(iso);
+  return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear() + ' ' +
+    ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+}
+function horasTxt(hs) { return (hs || []).map(function (h) { return h.replace('-', ' a '); }).join(', ') || '—'; }
+function convTxt(a) { return nombresConv(a).map(esc).join(', ') || 'Nadie convocado'; }
+function totales() {
+  return '<div class="stat-row"><div class="stat"><b id="t-h">0</b><small>Hombres</small></div>' +
+    '<div class="stat"><b id="t-m">0</b><small>Mujeres</small></div><div class="stat"><b id="t-t">0</b><small>Total</small></div></div>';
+}
+function recalc() {
+  var hs = Array.prototype.map.call(document.querySelectorAll('.g-h, #r-h'), function (i) { return parseInt(i.value, 10) || 0; });
+  var ms = Array.prototype.map.call(document.querySelectorAll('.g-m, #r-m'), function (i) { return parseInt(i.value, 10) || 0; });
+  var h = hs.reduce(function (x, y) { return x + y; }, 0), m = ms.reduce(function (x, y) { return x + y; }, 0);
+  if ($('t-h')) { $('t-h').textContent = h; $('t-m').textContent = m; $('t-t').textContent = h + m; }
+}
+function filaGrupo(g) {
+  return '<div class="gcard"><div class="fila" style="align-items:center"><input class="g-grupo" placeholder="Grupo o salón" value="' + esc(g.grupo || '') + '">' +
+    '<button class="btn sm g-quitar" type="button" aria-label="Quitar grupo">×</button></div>' +
+    '<div class="hm" style="margin-top:8px"><div><label>Hombres</label><input class="g-h" type="number" min="0" value="' + (g.hombres || '') + '"></div>' +
+    '<div><label>Mujeres</label><input class="g-m" type="number" min="0" value="' + (g.mujeres || '') + '"></div></div></div>';
+}
+function listaArchivos(tipo) {
+  var l = S.det.arch.filter(function (x) { return x.tipo === tipo; });
+  return l.length ? l.map(function (x) {
+    return '<div class="lista-arch"><div><span>' + esc(x.nombre) + '</span><button class="link ver-arch" data-ruta="' + esc(x.ruta) + '">Ver</button></div></div>';
+  }).join('') : '<p class="nota">Sin archivos.</p>';
+}
+function resumenRep(r) {
+  var g = r.grupos || [];
+  return '<p class="nota">Pláticas: ' + r.num_platicas + ' · Grupos: ' + g.length + ' · Incidencia: ' + esc(r.hay_incidencia || 'No') + '</p>' +
+    (r.observaciones ? '<p>' + esc(r.observaciones) + '</p>' : '');
+}
+
+function pintarReporte() {
+  var a = S.det.a, rep = repDe(a), ev = a.clase === 'Evento', puede = puedeReportar(a);
+  var sub = a.pl_lugares ? [a.pl_lugares.nivel, a.pl_lugares.clave].filter(Boolean).join(' · ') : '';
+  var datos = '<div class="card"><div class="card-h"><h3 style="margin:0">' + (ev ? 'Datos del evento' : 'Datos de la plática') + '</h3>' +
+    (esMando() && puede ? '<button class="btn sm" id="r-editar" type="button">Editar</button>' : '') + '</div>' +
+    (ev ? kv('Evento', esc(a.tipo_evento)) : '') +
+    kv('Lugar', esc(lugarDe(a)) + (!ev && sub ? '<small class="nota" style="display:block">' + esc(sub) + '</small>' : '')) +
+    kv('Ubicación', a.mapa_url ? '<a class="link" href="' + esc(a.mapa_url) + '" target="_blank" rel="noopener">Ver en el mapa</a>' : '') +
+    kv('Fecha', esc(fechaCorta(a.fecha))) + kv('Horario', esc(horasTxt(a.horarios))) +
+    (ev ? '' : kv('Turno', esc(a.turno)) + kv('Público', esc(a.publico)) + kv('Plática', esc(a.tema))) +
+    kv(ev ? 'Participaron' : 'Impartió', convTxt(a)) + '</div>';
+
+  var asist;
+  if (ev) {
+    var g0 = (rep && rep.grupos && rep.grupos[0]) || {};
+    asist = '<div class="card"><h3 style="margin-top:0">Asistentes</h3><div class="hm">' +
+      '<div><label>Hombres</label><input type="number" min="0" id="r-h" value="' + (g0.hombres || '') + '"></div>' +
+      '<div><label>Mujeres</label><input type="number" min="0" id="r-m" value="' + (g0.mujeres || '') + '"></div></div>' +
+      totales() + '</div>';
+  } else {
+    var grupos = (rep && rep.grupos && rep.grupos.length) ? rep.grupos : [{ grupo: '', hombres: '', mujeres: '' }];
+    asist = '<div class="card"><h3 style="margin-top:0">Asistentes</h3>' +
+      '<label>¿Cuántas pláticas se dieron?</label><input type="number" min="1" id="r-num" value="' + (rep ? rep.num_platicas : 1) + '">' +
+      '<p class="nota">Si juntaron salones o dieron la plática varias veces, pon cuántas veces se dio.</p>' +
+      '<p class="nota">Un recuadro por grupo o salón. Escribe el nombre como sea: 2°B, Salón 104, Enfermería 3er semestre.</p>' +
+      '<div id="r-grupos">' + grupos.map(filaGrupo).join('') + '</div>' +
+      '<button class="btn full" id="r-add" type="button">+ Otro grupo</button>' +
+      totales() + '</div>';
+  }
+
+  var inc = rep ? (rep.hay_incidencia || '') : '';
+  var incidencias = '<div class="card"><h3 style="margin-top:0">Incidencias</h3>' +
+    '<label>¿Se presentó alguna incidencia?</label><select id="r-inc"><option value="">Elige</option>' +
+    '<option' + (inc === 'No' ? ' selected' : '') + '>No</option><option' + (inc === 'Sí' ? ' selected' : '') + '>Sí</option></select>' +
+    '<label>Observaciones (opcional)</label><textarea id="r-obs">' + esc(rep ? rep.observaciones || '' : '') + '</textarea></div>';
+
+  var nFoto = S.det.arch.filter(function (x) { return x.tipo === 'foto'; }).length;
+  var nDoc = S.det.arch.filter(function (x) { return x.tipo === 'documento'; }).length;
+  var archivos = '<div class="card"><h3 style="margin-top:0">' + (ev ? 'Evidencias' : 'Fotos y documentos') + '</h3>' +
+    (listaArchivos('foto') + listaArchivos('documento')) +
+    '<div class="hm" style="margin-top:8px"><button class="btn" id="b-foto" type="button">+ Fotos</button>' +
+    '<button class="btn" id="b-doc" type="button">+ Documentos</button></div>' +
+    '<p class="nota">' + nFoto + ' de ' + MAX_ARCH + ' fotos · ' + nDoc + ' de ' + MAX_ARCH + ' documentos</p>' +
+    '<input type="file" accept="image/*" id="r-foto" class="oculto">' +
+    '<input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx" id="r-doc" class="oculto"></div>';
+
+  var quien = rep && rep.elaboro ? nombreDe(rep.elaboro) : S.yo.nombre;
+  var cuando = rep ? (rep.enviado || rep.creado) : null;
+  var registro = '<div class="card"><h3 style="margin-top:0">Registro</h3>' +
+    kv('Elaboró', esc(quien) + (cuando ? '<small class="nota" style="display:block">' + fechaHora(cuando) + '</small>' : '')) + '</div>';
+
+  var anular = (esMando() && rep && S.yo.puede_anular && rep.estado !== 'Anulado') ?
+    '<button class="btn bad full" id="r-anular" type="button">Anular reporte</button>' : '';
+  var barra = puede ? '<div class="barra-rep"><button class="btn" id="r-borrador" type="button">Guardar</button>' +
+    '<button class="btn verde" id="r-enviar" type="button">Enviar reporte</button></div>' : '';
+
+  abrirModal('<button class="link" id="r-volver" type="button">← Datos de la actividad</button>' +
+    '<h2>Reporte' + (rep ? ' ' + esc(rep.folio) : '') + '</h2>' +
+    datos + asist + incidencias + archivos + registro + anular + barra);
+  $('r-volver').onclick = function () { S.det.vista = 'datos'; pintarDetalle(); };
+  ligarReporte(a);
+}
+
+function ligarReporte(a) {
+  var ev = a.clase === 'Evento';
+  var raiz = $('modal-raiz');
+  raiz.oninput = recalc;
+  if ($('r-editar')) $('r-editar').onclick = function () { abrirForm(a); };
+  if (!ev) {
+    $('r-add').onclick = function () { $('r-grupos').insertAdjacentHTML('beforeend', filaGrupo({})); recalc(); };
+    $('r-grupos').onclick = function (e) {
+      if (e.target.classList.contains('g-quitar')) { e.target.closest('.gcard').remove(); recalc(); }
+    };
+  }
+  if ($('r-borrador')) $('r-borrador').onclick = function () { guardarReporte(a, false); };
+  if ($('r-enviar')) $('r-enviar').onclick = function () { guardarReporte(a, true); };
+  if ($('r-anular')) $('r-anular').onclick = function () { anularReporte(a); };
+  $('b-foto').onclick = function () { $('r-foto').click(); };
+  $('b-doc').onclick = function () { $('r-doc').click(); };
+  $('r-foto').onchange = function () { subirArchivo(a, 'foto', this); };
+  $('r-doc').onchange = function () { subirArchivo(a, 'documento', this); };
+  Array.prototype.forEach.call(document.querySelectorAll('.ver-arch'), function (b) {
+    b.onclick = function () { verArchivo(b.getAttribute('data-ruta')); };
+  });
+  recalc();
+}
+
+async function guardarReporte(a, enviar) {
+  var ev = a.clase === 'Evento', grupos, num;
+  if (ev) {
+    var h = parseInt($('r-h').value, 10) || 0, m = parseInt($('r-m').value, 10) || 0;
+    grupos = (h || m) ? [{ grado: '', grupo: 'Evento', hombres: h, mujeres: m }] : [];
+    num = 1;
+    if (enviar && !(h || m)) return toast('Escribe los asistentes.', true);
+  } else {
+    grupos = Array.prototype.map.call(document.querySelectorAll('#r-grupos .gcard'), function (c) {
+      return {
+        grado: '', grupo: c.querySelector('.g-grupo').value.trim(),
+        hombres: parseInt(c.querySelector('.g-h').value, 10) || 0, mujeres: parseInt(c.querySelector('.g-m').value, 10) || 0
+      };
+    }).filter(function (g) { return g.grupo || g.hombres || g.mujeres; });
+    num = parseInt($('r-num').value, 10) || 1;
+    if (enviar && !grupos.length) return toast('Agrega al menos un grupo.', true);
+  }
+  var inc = $('r-inc').value;
+  var obs = $('r-obs').value.trim();
+  if (enviar && !inc) return toast('Indica si hubo incidencia.', true);
+  if (enviar && inc === 'Sí' && !obs) return toast('Si hubo incidencia, escribe las observaciones.', true);
+  var rep = repDe(a);
+  cargando(true);
+  try {
+    chk(await sb.from('pl_reportes').upsert({
+      actividad_id: a.id, num_platicas: num, grupos: grupos, hay_incidencia: inc || null, observaciones: obs || null,
+      estado: enviar ? 'Enviado' : 'Borrador', elaboro: rep ? rep.elaboro || S.uid : S.uid,
+      enviado: enviar ? new Date().toISOString() : null
+    }, { onConflict: 'actividad_id' }));
+    toast(enviar ? 'Reporte enviado' : 'Guardado');
+    await abrirDetalle(a.id, enviar ? 'datos' : 'reporte');
+    irA(S.tab);
+  } catch (e) { tryErr(e); } finally { cargando(false); }
+}
+
+async function anularReporte(a) {
+  if (!confirm('¿Anular este reporte? Ya no se toma en cuenta en el Historial ni en el Dashboard.')) return;
+  cargando(true);
+  try {
+    chk(await sb.from('pl_reportes').update({ estado: 'Anulado' }).eq('actividad_id', a.id).select().single());
+    await abrirDetalle(a.id, 'datos');
+    irA(S.tab);
+  } catch (e) { tryErr(e); } finally { cargando(false); }
+}
+
+async function subirArchivo(a, tipo, input) {
+  var f = input.files[0];
+  if (!f) return;
+  var n = S.det.arch.filter(function (x) { return x.tipo === tipo; }).length;
+  if (n >= MAX_ARCH) return toast('Ya hay ' + MAX_ARCH + ' de este tipo. Pide a coordinación que quite uno.', true);
+  if (f.size > MAX_MB * 1024 * 1024) return toast('El archivo pasa de ' + MAX_MB + ' MB.', true);
+  var ruta = a.id + '/' + Date.now() + '-' + f.name.replace(/[^A-Za-z0-9._-]/g, '_');
+  cargando(true);
+  try {
+    chk(await sb.storage.from('pl-archivos').upload(ruta, f, { contentType: f.type || undefined }));
+    chk(await sb.from('pl_archivos').insert({ actividad_id: a.id, tipo: tipo, nombre: f.name, ruta: ruta, subido_por: S.uid }).select().single());
+    await abrirDetalle(a.id, 'reporte');
+  } catch (e) { tryErr(e); } finally { cargando(false); }
+}
+
+async function verArchivo(ruta) {
+  var r = await sb.storage.from('pl-archivos').createSignedUrl(ruta, 300);
+  if (r.error) return tryErr(r.error);
+  window.open(r.data.signedUrl, '_blank');
+}
+
+async function cambiarEstado(id, e) {
+  cargando(true);
+  try {
+    chk(await sb.from('pl_actividades').update({ estado: e }).eq('id', id).select().single());
+    toast('Estado: ' + e);
+    await abrirDetalle(id, 'datos');
+    irA(S.tab);
+  } catch (err) { tryErr(err); } finally { cargando(false); }
+}
+
+async function borrarActividad(id) {
+  if (!confirm('¿Eliminar esta plática o evento? También se borran convocados y reporte.')) return;
+  cargando(true);
+  try {
+    chk(await sb.from('pl_actividades').delete().eq('id', id));
+    cerrarModal();
+    toast('Eliminado');
+    irA(S.tab);
+  } catch (e) { tryErr(e); } finally { cargando(false); }
+}
+
+/* ---------------- Correo de Gmail (una sola vez) ---------------- */
+function pedirCorreo() {
+  $('modal-raiz').innerHTML = '<div class="modal-fondo"><div class="modal">' +
+    '<h2>Tu correo de Gmail</h2>' +
+    '<p class="nota">Sirve para conectar el calendario. Solo se pide una vez.</p>' +
+    '<label>Correo de Gmail</label><input type="email" id="g-correo" placeholder="nombre@gmail.com">' +
+    '<button class="btn pri full" id="g-guardar">Guardar</button></div></div>';
+  $('g-guardar').onclick = async function () {
+    var v = $('g-correo').value.trim().toLowerCase();
+    if (!/^[^\s@]+@gmail\.com$/.test(v)) return toast('Escribe un correo @gmail.com válido.', true);
+    cargando(true);
+    try {
+      chk(await sb.rpc('pl_guardar_correo', { p_correo: v }));
+      S.yo.correo_calendario = v;
+      cerrarModal();
+      toast('Correo guardado');
+    } catch (e) { tryErr(e); } finally { cargando(false); }
+  };
+}
+
+/* ---------------- Navegación y arranque ---------------- */
+function armarNav() {
+  var t = [{ k: 'agenda', txt: 'Agenda' }, { k: 'historial', txt: 'Historial' }];
+  if (S.yo.ve_dashboard) t.push({ k: 'dashboard', txt: 'Dashboard' });
+  if (esAdmin()) t.push({ k: 'catalogos', txt: 'Catálogos' });
+  $('tabs').innerHTML = t.map(function (x) {
+    return '<button data-tab="' + x.k + '"><svg viewBox="0 0 24 24">' + ICONOS[x.k] + '</svg><span>' + x.txt + '</span></button>';
+  }).join('');
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) {
+    b.onclick = function () { irA(b.getAttribute('data-tab')); };
+  });
+}
+
+function irA(tab) {
+  S.tab = tab;
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) {
+    b.classList.toggle('activo', b.getAttribute('data-tab') === tab);
+  });
+  window.scrollTo(0, 0);
+  if (tab === 'agenda') vAgenda();
+  else if (tab === 'historial') vHistorial();
+  else if (tab === 'dashboard') vDashboard();
+  else if (tab === 'catalogos') vCatalogos();
+}
+
+async function arrancar() {
+  var ok = await cargarBase();
+  if (!ok) return;
+  $('h-nombre').textContent = S.yo.nombre + ' · ' + (ROL_TXT[S.yo.rol] || '');
+  S.fecha = hoyStr();
+  armarNav();
+  if (!S.yo.correo_calendario) pedirCorreo();
+  irA('agenda');
+}
+
+arrancar().catch(function (e) {
+  $('contenido').innerHTML = '<div class="vacio">No se pudo cargar: ' + esc(e.message) + '</div>';
+});
+</script>
+</body>
+</html>

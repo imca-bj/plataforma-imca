@@ -1,0 +1,214 @@
+-- 24 · Vacaciones: permisos por módulo (se asignan desde la pantalla Personal)
+-- Correr en Supabase > SQL Editor después del 23. Se puede correr más de una vez.
+-- Qué hace: agrega el módulo Vacaciones al catálogo de permisos. Los administradores tienen todo.
+-- Para dar acceso a alguien (por ejemplo Arturo de RH), se asigna el módulo Vacaciones en Personal.
+
+-- 1. Módulo y permisos
+insert into acceso_modulos (codigo, nombre, orden) values ('vacaciones', 'Vacaciones', 4)
+on conflict (codigo) do nothing;
+
+insert into acceso_permisos (modulo, clave, descripcion, orden) values
+  ('vacaciones', 'ver', 'Ver saldos, ausencias y reportes', 1),
+  ('vacaciones', 'crear', 'Registrar ausencias y permisos', 2),
+  ('vacaciones', 'anular', 'Anular ausencias', 3),
+  ('vacaciones', 'forzar_saldo', 'Registrar vacaciones aunque no alcance el saldo', 4),
+  ('vacaciones', 'configurar', 'Administrar personal y festivos', 5)
+on conflict (modulo, clave) do nothing;
+
+-- Administrador: todos los permisos del módulo
+insert into acceso_rol_permisos (rol, modulo, clave)
+select 'administrador', 'vacaciones', clave from acceso_permisos where modulo = 'vacaciones'
+on conflict do nothing;
+
+-- 2. Comprobación de permisos
+create or replace function vac_tiene(p_clave text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select es_admin_plataforma() or exists (
+    select 1
+    from acceso_persona a
+    join perfiles p on p.id = a.perfil_id
+    join acceso_rol_permisos rp on rp.rol = a.rol and rp.modulo = a.modulo
+    where a.perfil_id = auth.uid()
+      and a.modulo = 'vacaciones'
+      and a.activo and p.activo
+      and rp.clave = p_clave
+  );
+$$;
+
+create or replace function vac_exigir(p_clave text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not vac_tiene(p_clave) then
+    raise exception 'No tienes permiso para esta acción en Vacaciones.';
+  end if;
+end $$;
+
+-- Nombre heredado del SQL 23: ahora exige el permiso 'configurar'
+-- (lo usan personal, feriados y las funciones de configuración)
+create or replace function vac_exigir_admin()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform vac_exigir('configurar');
+end $$;
+
+-- Saldo de una persona en el periodo de la fecha (sin revisar permisos: uso interno)
+create or replace function vac_saldo_de(p_persona uuid, p_fecha date)
+returns numeric language sql stable security definer set search_path = public as $$
+  select p.saldo_inicial - coalesce(sum(a.dias), 0)
+  from vac_personal p
+  left join vac_ausencias a
+    on a.persona_id = p.id and a.tipo = 'Vacaciones' and a.estatus = 'Registrada'
+   and a.fecha_inicio between
+       make_date(extract(year from p_fecha)::int, case when extract(month from p_fecha) <= 6 then 1 else 7 end, 1)
+       and (make_date(extract(year from p_fecha)::int, case when extract(month from p_fecha) <= 6 then 1 else 7 end, 1)
+            + interval '6 months' - interval '1 day')::date
+  where p.id = p_persona
+  group by p.saldo_inicial;
+$$;
+
+-- 3. Saldos: ahora según el permiso 'ver'
+create or replace function vac_saldos(p_fecha date default current_date)
+returns table (persona_id uuid, nombre text, area text, saldo_inicial integer, tomados numeric, saldo numeric)
+language sql stable security definer set search_path = public as $$
+  with rng as (
+    select make_date(extract(year from p_fecha)::int,
+                     case when extract(month from p_fecha) <= 6 then 1 else 7 end, 1) as desde
+  ),
+  per as (
+    select desde, (desde + interval '6 months' - interval '1 day')::date as hasta from rng
+  )
+  select p.id, p.nombre, p.area, p.saldo_inicial,
+    coalesce(sum(a.dias) filter (where a.tipo = 'Vacaciones' and a.estatus = 'Registrada'), 0) as tomados,
+    p.saldo_inicial - coalesce(sum(a.dias) filter (where a.tipo = 'Vacaciones' and a.estatus = 'Registrada'), 0) as saldo
+  from vac_personal p
+  cross join per
+  left join vac_ausencias a
+    on a.persona_id = p.id and a.fecha_inicio between per.desde and per.hasta
+  where p.activo and vac_tiene('ver')
+  group by p.id, p.nombre, p.area, p.saldo_inicial
+  order by p.nombre;
+$$;
+
+-- 4. Registrar: exige 'crear'; forzar el saldo exige 'forzar_saldo'
+create or replace function vac_registrar(
+  p_persona uuid,
+  p_tipo text,
+  p_inicio date,
+  p_fin date,
+  p_hora_salida time default null,
+  p_hora_regreso time default null,
+  p_motivo text default '',
+  p_observaciones text default '',
+  p_forzar boolean default false
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+  v_dias numeric := 0;
+  v_horas numeric := 0;
+  v_saldo numeric;
+  v_nombre text;
+begin
+  perform vac_exigir('crear');
+  if p_forzar and not vac_tiene('forzar_saldo') then
+    raise exception 'No tienes permiso para forzar el saldo.';
+  end if;
+
+  select nombre into v_nombre from vac_personal where id = p_persona and activo;
+  if v_nombre is null then
+    raise exception 'La persona no existe o está inactiva.';
+  end if;
+  if p_tipo not in ('Vacaciones', 'Incapacidad', 'Falta', 'Permiso con goce', 'Permiso parcial', 'Permiso sin goce', 'Compensatorio') then
+    raise exception 'Tipo de ausencia no válido.';
+  end if;
+  if p_inicio is null or p_fin is null or p_fin < p_inicio then
+    raise exception 'Revisa las fechas: la de fin no puede ser antes que la de inicio.';
+  end if;
+
+  if p_tipo = 'Permiso parcial' then
+    if p_fin <> p_inicio then
+      raise exception 'El permiso parcial es de un solo día.';
+    end if;
+    if p_hora_salida is null or p_hora_regreso is null or p_hora_regreso <= p_hora_salida then
+      raise exception 'Indica la hora de salida y la hora de regreso.';
+    end if;
+    v_horas := round(extract(epoch from (p_hora_regreso - p_hora_salida)) / 3600, 2);
+  else
+    p_hora_salida := null;
+    p_hora_regreso := null;
+    v_dias := vac_dias_habiles(p_inicio, p_fin);
+    if v_dias = 0 then
+      raise exception 'El rango no tiene días hábiles.';
+    end if;
+  end if;
+
+  if p_tipo = 'Vacaciones' then
+    p_motivo := '';
+  end if;
+
+  if p_tipo <> 'Permiso parcial' and exists (
+    select 1 from vac_ausencias a
+    where a.persona_id = p_persona and a.estatus = 'Registrada'
+      and a.tipo <> 'Permiso parcial'
+      and a.fecha_inicio <= p_fin and a.fecha_fin >= p_inicio
+  ) then
+    raise exception 'Se encima con otra ausencia de esta persona.';
+  end if;
+
+  if p_tipo = 'Vacaciones' and not p_forzar then
+    v_saldo := vac_saldo_de(p_persona, p_inicio);
+    if v_dias > coalesce(v_saldo, 0) then
+      raise exception 'Saldo insuficiente: quedan % días.', coalesce(v_saldo, 0);
+    end if;
+  end if;
+
+  insert into vac_ausencias (persona_id, tipo, fecha_inicio, fecha_fin, dias, hora_salida, hora_regreso, horas,
+                             motivo, observaciones, capturado_por, capturado_nombre)
+  values (p_persona, p_tipo, p_inicio, p_fin, v_dias, p_hora_salida, p_hora_regreso, v_horas,
+          coalesce(p_motivo, ''), coalesce(p_observaciones, ''), auth.uid(), vac_usuario_nombre())
+  returning id into v_id;
+
+  insert into vac_bitacora (usuario, accion, detalle)
+  values (vac_usuario_nombre(), 'Registró ausencia',
+          v_nombre || ' · ' || p_tipo || ' · ' || p_inicio::text || ' a ' || p_fin::text);
+
+  return v_id;
+end $$;
+
+-- 5. Anular: exige 'anular'
+create or replace function vac_anular(p_id uuid, p_motivo text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform vac_exigir('anular');
+  if trim(coalesce(p_motivo, '')) = '' then
+    raise exception 'Escribe el motivo de la anulación.';
+  end if;
+  update vac_ausencias
+     set estatus = 'Anulada', anulado_por = auth.uid(), anulado_nombre = vac_usuario_nombre(),
+         fecha_anulacion = now(), motivo_anulacion = trim(p_motivo)
+   where id = p_id and estatus = 'Registrada';
+  if not found then
+    raise exception 'La ausencia no existe o ya está anulada.';
+  end if;
+  insert into vac_bitacora (usuario, accion, detalle)
+  values (vac_usuario_nombre(), 'Anuló ausencia', p_id::text || ' · ' || trim(p_motivo));
+end $$;
+
+-- 6. Lectura de tablas según 'ver'
+drop policy if exists vac_personal_ver on vac_personal;
+create policy vac_personal_ver on vac_personal for select to authenticated using (vac_tiene('ver'));
+drop policy if exists vac_feriados_ver on vac_feriados;
+create policy vac_feriados_ver on vac_feriados for select to authenticated using (vac_tiene('ver'));
+drop policy if exists vac_ausencias_ver on vac_ausencias;
+create policy vac_ausencias_ver on vac_ausencias for select to authenticated using (vac_tiene('ver'));
+drop policy if exists vac_bitacora_ver on vac_bitacora;
+create policy vac_bitacora_ver on vac_bitacora for select to authenticated using (vac_tiene('configurar'));
+
+-- 7. Permisos de ejecución
+revoke all on function vac_tiene(text), vac_exigir(text), vac_exigir_admin(), vac_saldo_de(uuid, date)
+  from public, anon;
+grant execute on function vac_tiene(text), vac_exigir(text) to authenticated;
+
+-- Verificación: debe dar 5 permisos para el administrador
+select count(*) as permisos_admin from acceso_rol_permisos
+where rol = 'administrador' and modulo = 'vacaciones';

@@ -1,0 +1,180 @@
+-- 37 · Control de gasolina: base de datos y permisos
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para crear vehículos y cargas, y para que el acceso salga de Personal.
+--   administrador y coordinador: todo (registrar, ver, administrar catálogo)
+--   consulta (Carla, Juan Carlos): solo ver, sin registrar ni agregar
+--   operativo (los choferes de las camionetas): solo registrar sus cargas y kilometraje, sin historial
+
+-- 1. Módulo y permisos en Personal
+insert into acceso_modulos (codigo, nombre, orden) values ('gasolina', 'Control de gasolina', 5)
+on conflict (codigo) do nothing;
+
+insert into acceso_permisos (modulo, clave, descripcion, orden) values
+  ('gasolina', 'ver', 'Ver historial y mediciones', 1),
+  ('gasolina', 'registrar', 'Registrar cargas y kilometraje', 2),
+  ('gasolina', 'administrar', 'Administrar catálogo de vehículos y choferes', 3)
+on conflict (modulo, clave) do nothing;
+
+insert into acceso_rol_permisos (rol, modulo, clave) values
+  ('administrador', 'gasolina', 'ver'),
+  ('administrador', 'gasolina', 'registrar'),
+  ('administrador', 'gasolina', 'administrar'),
+  ('coordinador', 'gasolina', 'ver'),
+  ('coordinador', 'gasolina', 'registrar'),
+  ('coordinador', 'gasolina', 'administrar'),
+  ('consulta', 'gasolina', 'ver'),
+  ('operativo', 'gasolina', 'registrar')
+on conflict do nothing;
+
+-- 2. Tablas
+create table if not exists gas_vehiculos (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  placas text,
+  activo boolean not null default true,
+  creado timestamptz not null default now()
+);
+
+create table if not exists gas_cargas (
+  id uuid primary key default gen_random_uuid(),
+  fecha date not null,
+  registrado timestamptz not null default now(),
+  vehiculo_id uuid not null references gas_vehiculos(id),
+  perfil_id uuid not null references perfiles(id),
+  chofer_nombre text not null,
+  litros numeric(8,2) not null check (litros > 0 and litros <= 300),
+  km_odometro integer not null check (km_odometro >= 0),
+  km_recorridos integer,
+  foto_odometro text not null,
+  foto_nivel text not null,
+  incidencia text
+);
+
+-- 3. Comprobar permiso (administrador de la plataforma tiene todo)
+create or replace function gas_tiene(p_clave text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select es_admin_plataforma() or exists (
+    select 1
+    from acceso_persona a
+    join perfiles p on p.id = a.perfil_id
+    join acceso_rol_permisos rp on rp.rol = a.rol and rp.modulo = a.modulo
+    where a.perfil_id = auth.uid()
+      and a.modulo = 'gasolina'
+      and a.activo and p.activo
+      and rp.clave = p_clave
+  );
+$$;
+
+-- 4. Seguridad de las tablas: se lee con permiso "ver"; se escribe solo con funciones
+alter table gas_vehiculos enable row level security;
+alter table gas_cargas enable row level security;
+
+drop policy if exists "gas vehiculos leer" on gas_vehiculos;
+create policy "gas vehiculos leer" on gas_vehiculos for select to authenticated
+  using (gas_tiene('ver') or gas_tiene('registrar'));
+
+drop policy if exists "gas cargas leer" on gas_cargas;
+create policy "gas cargas leer" on gas_cargas for select to authenticated
+  using (gas_tiene('ver'));
+
+revoke all on gas_vehiculos, gas_cargas from anon, authenticated;
+grant select on gas_vehiculos, gas_cargas to authenticated;
+
+-- 5. Registrar una carga (chofer solo para sí mismo; administrar puede registrar a nombre de otro)
+create or replace function gas_registrar(
+  p_vehiculo uuid, p_fecha date, p_litros numeric, p_km integer,
+  p_foto_odometro text, p_foto_nivel text, p_incidencia text default null,
+  p_perfil uuid default null
+)
+returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_perfil uuid := coalesce(p_perfil, auth.uid());
+  v_nombre text;
+  v_vehiculo gas_vehiculos%rowtype;
+  v_ultimo integer;
+  v_km_rec integer;
+  v_inc text := nullif(btrim(coalesce(p_incidencia, '')), '');
+  v_id uuid;
+begin
+  if not gas_tiene('registrar') then
+    raise exception 'No tienes permiso para registrar cargas.';
+  end if;
+  if v_perfil <> auth.uid() and not gas_tiene('administrar') then
+    raise exception 'Solo puedes registrar tus propias cargas.';
+  end if;
+  select nombre into v_nombre from perfiles where id = v_perfil and activo;
+  if v_nombre is null then raise exception 'La persona no está activa.'; end if;
+
+  select * into v_vehiculo from gas_vehiculos where id = p_vehiculo;
+  if not found or not v_vehiculo.activo then raise exception 'Ese vehículo no está disponible.'; end if;
+
+  if p_fecha is null or p_fecha > (now() at time zone 'America/Cancun')::date then
+    raise exception 'La fecha no puede ser futura.';
+  end if;
+  if p_litros is null or p_litros <= 0 or p_litros > 300 then
+    raise exception 'Los litros deben ser mayores a 0 y máximo 300.';
+  end if;
+  if p_km is null or p_km < 0 then
+    raise exception 'El kilometraje debe ser un número de 0 o mayor.';
+  end if;
+  if coalesce(p_foto_odometro, '') = '' or coalesce(p_foto_nivel, '') = '' then
+    raise exception 'Las dos fotos son obligatorias.';
+  end if;
+  if v_inc is not null and length(v_inc) < 3 then
+    raise exception 'La incidencia debe tener al menos 3 caracteres.';
+  end if;
+
+  select km_odometro into v_ultimo from gas_cargas
+  where vehiculo_id = p_vehiculo order by fecha desc, registrado desc limit 1;
+  if v_ultimo is not null and p_km < v_ultimo then
+    raise exception 'El kilometraje es menor que el último registrado (% km).', v_ultimo;
+  end if;
+  v_km_rec := case when v_ultimo is null then null else p_km - v_ultimo end;
+
+  insert into gas_cargas (fecha, vehiculo_id, perfil_id, chofer_nombre, litros, km_odometro,
+                          km_recorridos, foto_odometro, foto_nivel, incidencia)
+  values (p_fecha, p_vehiculo, v_perfil, v_nombre, p_litros, p_km,
+          v_km_rec, p_foto_odometro, p_foto_nivel, v_inc)
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+-- 6. Catálogo de vehículos (solo administrar)
+create or replace function gas_guardar_vehiculo(p_id uuid, p_nombre text, p_placas text, p_activo boolean)
+returns uuid
+language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  if not gas_tiene('administrar') then raise exception 'No tienes permiso para administrar el catálogo.'; end if;
+  if btrim(coalesce(p_nombre, '')) = '' then raise exception 'El nombre del vehículo es obligatorio.'; end if;
+  if p_id is null then
+    insert into gas_vehiculos (nombre, placas, activo)
+    values (btrim(p_nombre), nullif(btrim(coalesce(p_placas, '')), ''), coalesce(p_activo, true))
+    returning id into v_id;
+  else
+    update gas_vehiculos
+    set nombre = btrim(p_nombre),
+        placas = nullif(btrim(coalesce(p_placas, '')), ''),
+        activo = coalesce(p_activo, activo)
+    where id = p_id
+    returning id into v_id;
+    if v_id is null then raise exception 'Ese vehículo no existe.'; end if;
+  end if;
+  return v_id;
+end;
+$$;
+
+-- 7. Vehículos iniciales (igual que la versión actual)
+insert into gas_vehiculos (nombre, activo)
+select v.nombre, true
+from (values ('Camioneta'), ('Vehículo 2'), ('Vehículo 3')) as v(nombre)
+where not exists (select 1 from gas_vehiculos);
+
+grant execute on function gas_tiene(text), gas_registrar(uuid, date, numeric, integer, text, text, text, uuid),
+  gas_guardar_vehiculo(uuid, text, text, boolean) to authenticated;
+
+-- Revisión: deben salir 3 vehículos y 8 permisos de roles en gasolina
+select (select count(*) from gas_vehiculos) as vehiculos,
+       (select count(*) from acceso_rol_permisos where modulo = 'gasolina') as permisos_roles;

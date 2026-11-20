@@ -1,0 +1,62 @@
+-- 22 · Vacaciones: listado de personal (carga inicial)
+-- Correr en Supabase > SQL Editor, una sola vez, después del 21.
+-- Cada persona inicia con 10 días de saldo. Los días tomados se capturan después.
+
+create table if not exists vac_personal (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null unique,
+  fecha_ingreso date,
+  saldo_inicial integer not null default 10,
+  activo boolean not null default true,
+  creado timestamptz not null default now()
+);
+
+alter table vac_personal enable row level security;
+
+drop policy if exists vac_personal_ver on vac_personal;
+create policy vac_personal_ver on vac_personal
+  for select to authenticated
+  using (es_admin_plataforma());
+
+revoke all on vac_personal from anon, authenticated;
+grant select on vac_personal to authenticated;
+
+insert into vac_personal (nombre, fecha_ingreso, activo) values
+  ('Alberto Ortuño', '2023-10-01', true),
+  ('Jose Guillermo Escobedo', '2026-03-01', true),
+  ('Carla Guzmán Lopez Gatell', '2020-03-16', true),
+  ('Arturo Alejandro Soto Rincon', '2019-05-15', true),
+  ('Juan Carlos Farias Pisson', '2023-12-01', true),
+  ('Kenny Rene Rodriguez Perez', '2022-01-03', true),
+  ('Erick David Aviles Monreal', '2019-04-16', true),
+  ('Nallely Wigelmy Canche Canche', '2020-01-16', true),
+  ('Fabrizio Fuentes Vargas', '2020-03-16', true),
+  ('Sonia Guadalupe Chavez Celaya', '2019-04-16', true),
+  ('Nisha Morgan Fernandez', '2023-01-02', true),
+  ('Myrna Carolina Rebolledo Chacon', '2025-03-01', true),
+  ('Maya Guadarrama Hernandez', '2025-02-01', true),
+  ('Luis Angel Miss Ayuso', '2022-03-01', true),
+  ('Wynne Marletty Can Can', '2024-08-01', true),
+  ('Nidia Nathaly Ramos García', '2025-01-15', true),
+  ('Leydi Maria Ek Noh', '2023-08-01', true),
+  ('Jazmin Hernandez Rosalino', '2023-11-15', true),
+  ('Elizabeth Michelle Velasquez Galvez', '2024-01-16', true),
+  ('Andres Riaño Cruz', '2025-05-01', true),
+  ('Ivan Adiv Villaseñor Salas', '2025-06-16', true),
+  ('Nataly Karina Sanchez May', '2025-11-01', true),
+  ('Rigoberto Rodriguez Sanchez', '2025-11-01', true),
+  ('Oscar Alvarez Calderon', '2026-02-01', true),
+  ('Yesica Maria Cuxim Cespedes', '2026-02-01', true),
+  ('Rosa Isela Treviño Nuñez', '2026-04-16', true),
+  ('Lizbeth Jimenez Gonzalez', '2026-04-16', true),
+  ('Marlene Beatriz Calderon Mex', '2026-06-01', true),
+  ('Ana Luisa Jimenez Hernandez', '2026-06-01', true),
+  ('Israel Paramo Villasana', '2026-10-01', true),
+  ('Mariana Zamora Montes De Oca', '2026-09-01', true),
+  ('Maria Cristel Santos Torrecillas', '2026-09-01', true),
+  ('Clara Elena Abreu Martinez', '2026-06-01', true)
+on conflict (nombre) do nothing;
+
+-- Resultado esperado: total = 33 y con_10 = 33
+select count(*) as total, count(*) filter (where saldo_inicial = 10) as con_10
+from vac_personal;

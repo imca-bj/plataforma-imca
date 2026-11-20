@@ -1,0 +1,82 @@
+/* =====================================================================
+   IMCA · Línea visual "Caribe"  —  hoja común para todos los módulos
+   Cárguese DESPUÉS del <style> propio de cada página:
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+     <link rel="stylesheet" href="imca-caribe.css">
+   Reemplaza los valores de las variables que YA usan las páginas
+   (--bg, --brand, --ok…; y en index.html --vino, --tinta…), así que
+   el HTML y el JS no cambian para que el color cambie.
+   ===================================================================== */
+:root{
+  /* Paleta base */
+  --arena:#f7f3ec; --arena-2:#efe8dc; --tarjeta:#fffdf9;
+  --turquesa:#1f8a8a; --turquesa-suave:#dff1ef; --turquesa-osc:#176d6d;
+  --coral:#ef7b5a; --coral-suave:#fde8e0;
+  --sol:#f2b84b; --sol-suave:#fdf1d6;
+  --laguna:#0f3b40; --laguna-2:#174b51;
+  --tinta-c:#1f3a40; --gris-c:#6b7a7d; --linea-c:#e8e0d3;
+  --amanecer:linear-gradient(90deg,#f2b84b,#ef7b5a 45%,#1f8a8a);
+  --sombra:0 1px 2px rgba(15,59,64,.05),0 8px 24px -12px rgba(15,59,64,.18);
+  --sombra-float:0 18px 40px -18px rgba(15,59,64,.35);
+
+  /* Variables de agenda-atencion.html / agenda-operativo.html */
+  --bg:var(--arena); --card:var(--tarjeta); --ink:var(--tinta-c);
+  --muted:var(--gris-c); --line:var(--linea-c);
+  --brand:var(--turquesa); --brand-soft:var(--turquesa-suave);
+  --ok:#2f8f6f; --ok-soft:#dcf1e8;
+  --bad:#d95a3a; --bad-soft:var(--coral-suave);
+  --warn:#b7791f; --warn-soft:var(--sol-suave);
+  --gris-soft:var(--arena-2); --radius:16px;
+
+  /* Variables de index.html */
+  --vino:var(--turquesa); --vino-claro:var(--turquesa-osc); --vino-suave:var(--turquesa-suave);
+  --tinta:var(--tinta-c); --gris:var(--gris-c); --borde:var(--linea-c);
+  --fondo:var(--arena); --error:#d95a3a;
+}
+
+/* Tipografía */
+body{font-family:"Manrope",system-ui,sans-serif;background:var(--arena);color:var(--tinta-c);-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,.titulo,.stat b,.ag-stat b{font-family:"Sora",system-ui,sans-serif;letter-spacing:-.02em;color:var(--tinta-c)}
+h1{font-weight:700} h2,h3{font-weight:600}
+
+/* Franja de amanecer arriba de cada página */
+body::before{content:"";position:fixed;inset:0 0 auto 0;height:4px;background:var(--amanecer);z-index:9999}
+
+/* Tarjetas */
+.card,.tarjeta,.tarjeta-login,.modal{background:var(--tarjeta);border:1px solid var(--linea-c);border-radius:20px;box-shadow:var(--sombra)}
+.card{transition:transform .15s ease,box-shadow .15s ease}
+.card:hover{box-shadow:var(--sombra-float)}
+
+/* Botones */
+.btn{border-radius:12px;font-weight:600;transition:transform .12s ease,background .15s}
+.btn:active{transform:scale(.97)}
+.btn.pri,.btn-principal{background:var(--turquesa);color:#fff;border-color:transparent;box-shadow:0 8px 18px -10px var(--turquesa)}
+.btn.pri:hover,.btn-principal:hover{background:var(--turquesa-osc)}
+.btn.bad{background:var(--coral-suave);color:#b24526;border-color:transparent}
+
+/* Chips / estados (píldoras) */
+.chip{border-radius:999px;font-weight:600;font-size:.78rem;padding:.25rem .65rem}
+.chip.on,.seg .on{background:var(--turquesa);color:#fff}
+.ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+
+/* Selector segmentado */
+.seg{background:var(--arena-2);border-radius:14px;padding:4px}
+.seg .on{background:var(--tarjeta);color:var(--tinta-c);box-shadow:var(--sombra)}
+
+/* Indicadores del tablero */
+.stat,.ag-stat{border-radius:20px;background:var(--tarjeta);border:1px solid var(--linea-c);position:relative;overflow:hidden}
+.stat::after,.ag-stat::after{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--amanecer)}
+
+/* Campos de formulario */
+input,select,textarea{font-family:inherit;border-radius:12px;border:1px solid var(--linea-c);background:#fff}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--turquesa);box-shadow:0 0 0 3px var(--turquesa-suave)}
+
+/* Modal */
+.modal-fondo{background:rgba(15,59,64,.45);backdrop-filter:blur(3px)}
+
+/* Logotipo: nunca más alto que esto */
+.logo,.marca img,header img{max-height:44px;width:auto}
+
+/* Vacío */
+.vacio{border:1.5px dashed var(--linea-c);border-radius:20px;color:var(--gris-c);background:transparent}

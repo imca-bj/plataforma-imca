@@ -1,0 +1,101 @@
+-- 35 · Agenda de atención toma sus accesos de Personal
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para que Agenda de atención use lo que asignas en Personal, igual que los demás módulos.
+-- Quien no tenga Agenda de atención asignada no entra ni ve datos, aunque tenga cuenta.
+-- Al asignar un rol en Personal, el rol interno de la agenda se ajusta solo.
+
+-- 1. Rol efectivo para la agenda: solo si tiene Agenda de atención activa en Personal
+create or replace function mi_rol()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.rol
+  from perfiles p
+  where p.id = auth.uid()
+    and p.activo = true
+    and exists (
+      select 1 from acceso_persona a
+      where a.perfil_id = p.id and a.modulo = 'atencion' and a.activo = true
+    );
+$$;
+
+grant execute on function mi_rol() to authenticated;
+
+-- 2. Traducir el rol de Personal al rol interno de la agenda de atención
+create or replace function acceso_rol_atencion(p_rol text)
+returns text language sql immutable as $$
+  select case p_rol
+    when 'administrador' then 'admin'
+    when 'coordinador' then 'coordinacion'
+    when 'terapeuta' then 'terapeuta'
+    when 'consulta' then 'consulta'
+    when 'operativo' then 'operativo'
+    else 'consulta'
+  end
+$$;
+
+-- 3. Asignar roles: ahora también ajusta el rol interno de Agenda de atención y Agenda operativo
+create or replace function acceso_asignar_rol(
+  p_perfil uuid, p_modulo text, p_rol text, p_activo boolean default true
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not es_admin_plataforma() then
+    raise exception 'Solo el administrador puede cambiar roles.';
+  end if;
+  if not exists (select 1 from acceso_roles r where r.rol = p_rol and r.activo) then
+    raise exception 'Ese rol no existe o está desactivado.';
+  end if;
+  -- Nadie puede quitarse a sí mismo el rol de administrador en todos los módulos
+  if p_perfil = auth.uid() and (not p_activo or p_rol <> 'administrador')
+     and not exists (
+       select 1 from acceso_persona x
+       where x.perfil_id = p_perfil and x.modulo <> p_modulo
+         and x.rol = 'administrador' and x.activo
+     ) then
+    raise exception 'No puedes quitarte a ti mismo el rol de administrador en todos los módulos.';
+  end if;
+  insert into acceso_persona (perfil_id, modulo, rol, activo, actualizado, actualizado_por)
+  values (p_perfil, p_modulo, p_rol, p_activo, now(), auth.uid())
+  on conflict (perfil_id, modulo) do update
+    set rol = excluded.rol,
+        activo = excluded.activo,
+        actualizado = now(),
+        actualizado_por = auth.uid();
+
+  if p_modulo = 'atencion' then
+    update perfiles
+    set rol = acceso_rol_atencion(p_rol)
+    where id = p_perfil;
+  end if;
+
+  if p_modulo = 'operativo' then
+    insert into pl_personal (perfil_id, rol, convocable, ve_dashboard, puede_anular, puede_descargar, activo)
+    values (p_perfil, acceso_rol_operativo(p_rol), false, false,
+            acceso_rol_operativo(p_rol) in ('administrador', 'coordinador', 'supervision'),
+            acceso_rol_operativo(p_rol) in ('administrador', 'coordinador', 'supervision'),
+            p_activo)
+    on conflict (perfil_id) do update
+      set rol = excluded.rol, activo = excluded.activo;
+  end if;
+end;
+$$;
+
+grant execute on function acceso_asignar_rol(uuid, text, text, boolean) to authenticated;
+
+-- 4. Ajustar el rol interno de quienes ya tienen Agenda de atención asignada
+update perfiles p
+set rol = acceso_rol_atencion(a.rol)
+from acceso_persona a
+where a.perfil_id = p.id and a.modulo = 'atencion' and a.activo = true;
+
+-- Revisión: personas con Agenda de atención activa
+select count(*) as personas_atencion_activas
+from acceso_persona where modulo = 'atencion' and activo = true;

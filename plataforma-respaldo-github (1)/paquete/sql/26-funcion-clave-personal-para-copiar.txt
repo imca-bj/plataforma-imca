@@ -1,0 +1,101 @@
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+
+const cabeceras = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+const responde = (cuerpo: unknown, estado = 200) =>
+  new Response(JSON.stringify(cuerpo), { status: estado, headers: cabeceras });
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: cabeceras });
+  if (req.method !== 'POST') return responde({ error: 'Método no permitido' }, 405);
+
+  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!token) return responde({ error: 'Sin sesión' }, 401);
+
+  const url = Deno.env.get('SUPABASE_URL')!;
+  const anon = Deno.env.get('SUPABASE_ANON_KEY')!;
+  const claveAdmin = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+  // 1. Quién llama: debe tener sesión y ser administrador de la plataforma
+  const quien = createClient(url, anon, {
+    global: { headers: { Authorization: 'Bearer ' + token } },
+    auth: { persistSession: false },
+  });
+  const { data: { user }, error: errUsuario } = await quien.auth.getUser(token);
+  if (errUsuario || !user) return responde({ error: 'Sesión no válida' }, 401);
+
+  const { data: esAdmin, error: errAdmin } = await quien.rpc('es_admin_plataforma');
+  if (errAdmin || esAdmin !== true) {
+    return responde({ error: 'Solo administradores pueden dar contraseñas' }, 403);
+  }
+
+  // 2. Datos que llegan
+  let datos: { personal_id?: string; clave?: string };
+  try {
+    datos = await req.json();
+  } catch {
+    return responde({ error: 'Datos no válidos' }, 400);
+  }
+  const clave = String(datos.clave || '');
+  if (clave.length < 8) return responde({ error: 'La contraseña debe tener al menos 8 caracteres' }, 400);
+  if (!datos.personal_id) return responde({ error: 'Falta la persona' }, 400);
+
+  // 3. Cambios con permisos de administrador del sistema (solo en el servidor)
+  const admin = createClient(url, claveAdmin, { auth: { persistSession: false, autoRefreshToken: false } });
+
+  const { data: persona, error: errPersona } = await admin
+    .from('personal_catalogo')
+    .select('id, nombre, correo, perfil_id, activo')
+    .eq('id', datos.personal_id)
+    .maybeSingle();
+  if (errPersona || !persona) return responde({ error: 'La persona no existe en el catálogo' }, 404);
+  if (!persona.activo) return responde({ error: 'La persona está inactiva' }, 400);
+  if (!persona.correo) return responde({ error: 'La persona no tiene correo' }, 400);
+
+  // 3a. Ya tiene cuenta: solo cambia la contraseña y marca que la debe cambiar al entrar
+  if (persona.perfil_id) {
+    const { error } = await admin.auth.admin.updateUserById(persona.perfil_id, {
+      password: clave,
+      user_metadata: { debe_cambiar_clave: true },
+    });
+    if (error) return responde({ error: error.message }, 400);
+    return responde({ ok: true, accion: 'clave_cambiada' });
+  }
+
+  // 3b. No tiene cuenta: se crea, se da de alta en perfiles y se enlaza con el catálogo
+  const { data: creado, error: errCrear } = await admin.auth.admin.createUser({
+    email: persona.correo,
+    password: clave,
+    email_confirm: true,
+    user_metadata: { debe_cambiar_clave: true, nombre: persona.nombre },
+  });
+  if (errCrear || !creado.user) {
+    return responde({ error: errCrear?.message || 'No se pudo crear la cuenta' }, 400);
+  }
+  const nuevoId = creado.user.id;
+
+  const { error: errPerfil } = await admin.from('perfiles').insert({
+    id: nuevoId,
+    nombre: persona.nombre,
+    email: persona.correo,
+    rol: 'consulta',
+    activo: true,
+  });
+  if (errPerfil) {
+    await admin.auth.admin.deleteUser(nuevoId);
+    return responde({ error: 'No se pudo crear el perfil: ' + errPerfil.message }, 400);
+  }
+
+  const { error: errEnlace } = await admin
+    .from('personal_catalogo')
+    .update({ perfil_id: nuevoId })
+    .eq('id', persona.id);
+  if (errEnlace) return responde({ error: 'La cuenta se creó, pero no se enlazó: ' + errEnlace.message }, 500);
+
+  return responde({ ok: true, accion: 'cuenta_creada' });
+});

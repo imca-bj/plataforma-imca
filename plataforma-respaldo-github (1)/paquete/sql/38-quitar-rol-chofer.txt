@@ -1,0 +1,14 @@
+-- 38 · Quitar el rol "chofer" que se creó por error
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para que los choferes sean solo Operativo. Deja 8 permisos de roles en gasolina.
+
+delete from acceso_rol_permisos where rol = 'chofer';
+
+delete from acceso_roles
+where rol = 'chofer'
+  and not exists (select 1 from acceso_persona where rol = 'chofer');
+
+-- Revisión: debe salir 8 permisos de roles en gasolina y ningún rol "chofer"
+select
+  (select count(*) from acceso_rol_permisos where modulo = 'gasolina') as permisos_roles,
+  (select count(*) from acceso_roles where rol = 'chofer') as rol_chofer;

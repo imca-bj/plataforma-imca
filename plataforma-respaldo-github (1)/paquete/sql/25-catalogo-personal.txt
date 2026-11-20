@@ -1,0 +1,110 @@
+-- 25 · Catálogo único de personal del IMCA
+-- Correr en Supabase > SQL Editor después del 24. Se puede correr más de una vez.
+-- Qué hace:
+--   1. Crea el catálogo personal_catalogo con las 32 personas de Equipo_IMCA.xlsx.
+--   2. Enlaza cada persona con su cuenta de acceso (perfiles) cuando el nombre coincide de forma única.
+--      Así no se duplica a quien ya tiene cuenta.
+--   3. Enlaza el personal de Vacaciones (vac_personal) con el catálogo.
+-- Al final muestra quién quedó sin enlazar para revisarlo.
+
+-- 1. Función para comparar nombres sin acentos y solo con las dos primeras palabras
+create or replace function txt_clave(t text)
+returns text language sql immutable as $$
+  select array_to_string((string_to_array(
+           lower(translate(coalesce(t, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNaeiouun')), ' '))[1:2], ' ');
+$$;
+
+-- 2. Catálogo
+create table if not exists personal_catalogo (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  correo text unique,
+  area text not null default '',
+  puesto text not null default '',
+  activo boolean not null default true,
+  perfil_id uuid unique references perfiles(id) on delete set null,
+  creado timestamptz not null default now()
+);
+
+alter table personal_catalogo enable row level security;
+drop policy if exists personal_catalogo_ver on personal_catalogo;
+create policy personal_catalogo_ver on personal_catalogo for select to authenticated using (es_admin_plataforma());
+revoke all on personal_catalogo from anon, authenticated;
+grant select on personal_catalogo to authenticated;
+
+-- 3. Personas de Equipo_IMCA.xlsx (sin duplicar por correo)
+insert into personal_catalogo (nombre, correo, area, puesto) values
+  ('Alberto Ortuno', 'direccion@imcabj.gob.mx', 'Dirección General', 'Director general'),
+  ('Carla Guzmán López Gatell', 'carla.guzman@imcabj.gob.mx', 'Administrativa', 'Directora administrativa'),
+  ('Nallely Wigelmy Canche Canche', 'nallely.canche@imcabj.gob.mx', 'Administrativa', 'Administrativo'),
+  ('Arturo Alejandro Soto Rincon', 'arturo.soto@imcabj.gob.mx', 'Administrativa', 'Administrativo'),
+  ('Ana Luisa Jimenez Hernandez', 'ana.jimenez@imcabj.gob.mx', 'Administrativa', 'Coordinador administrativo'),
+  ('Myrna Carolina Rebolledo Chacón', 'carolina.rebolledo@imcabj.gob.mx', 'Administrativa', 'Administrativo'),
+  ('José Guillermo Escobedo Hernández', 'guillermo.escobedo@imcabj.gob.mx', 'Administrativa', 'Coordinador administrativo'),
+  ('Rosa Isela Trevino Nunez', 'rossy.trevino@imcabj.gob.mx', 'Administrativa', 'Administrativo'),
+  ('Juan Carlos Farias Pisson', 'juancarlos.farias@imcabj.gob.mx', 'Terapéutico Operativo', 'Director operativo'),
+  ('Nisha Morgan Fernandez', 'nisha.morgan@imcabj.gob.mx', 'Terapéutico Operativo', 'Coordinadora operativo'),
+  ('Nataly Karina Sanchez May', 'karina.sanchez@imcabj.gob.mx', 'Terapéutico Operativo', 'Operativo'),
+  ('Leydi Maria Ek Noh', 'leydi.ek@imcabj.gob.mx', 'Terapéutico Operativo', 'Operativo'),
+  ('Lizbeth Jimenez Gonzalez', 'lizbeth.jimenez@imcabj.gob.mx', 'Terapéutico Operativo', 'Operativo'),
+  ('Nidia Nathaly Ramos Garcia', 'nathaly.ramos@imcabj.gob.mx', 'Terapéutico Operativo', 'Operativo'),
+  ('Ivan Adiv Villasenor Salas', 'ivan.villasenor@imcabj.gob.mx', 'Terapéutico Operativo', 'Operativo'),
+  ('Jazmin Hernandez Rosalino', 'jazmin.hernandez@imcabj.gob.mx', 'Terapéutico Operativo', 'Operativo'),
+  ('Rigoberto Rodriguez Sanchez', 'rigoberto.rodriguez@imcabj.gob.mx', 'Terapéutico Operativo', 'Operativo'),
+  ('Yesica Maria Cuxim Cespedes', 'yesica.cuxim@imcabj.gob.mx', 'Terapéutico Operativo', 'Operativo'),
+  ('Isrrael Paramo Villasana', 'isrrael.paramo@imcabj.gob.mx', 'Terapéutico Operativo', 'Operativo'),
+  ('Marlene Beatriz Calderon Mex', 'marlene.calderon@imcabj.gob.mx', 'Terapéutico de Atención', 'Directora terapéutico'),
+  ('Mariana Zamora Montes de Oca', 'mariana.zamora@imcabj.gob.mx', 'Terapéutico de Atención', 'Terapeuta'),
+  ('Maria Cristel Santos Torrecillas', 'cristel.santos@imcabj.gob.mx', 'Terapéutico de Atención', 'Terapeuta'),
+  ('Elizabeth Michelle Velasquez Galvez', 'michelle.velasquez@imcabj.gob.mx', 'Terapéutico de Atención', 'Terapeuta'),
+  ('Wynne Marletyy Can Can', 'wynne.can@imcabj.gob.mx', 'Terapéutico de Atención', 'Terapeuta'),
+  ('Andres Riano Cruz', 'andres.riano@imcabj.gob.mx', 'Terapéutico de Atención', 'Terapeuta'),
+  ('Erick David Aviles Monreal', 'erick.aviles@imcabj.gob.mx', 'Terapéutico de Atención', 'Terapeuta'),
+  ('Fabrizio Fuentes Vargas', 'fabrizio.fuentes@imcabj.gob.mx', 'Terapéutico de Atención', 'Terapeuta'),
+  ('Clara Elena Abreu Martinez', 'clara.abreu@imcabj.gob.mx', 'Terapéutico de Atención', 'Psiquiatra'),
+  ('Kenny Rene Rodriguez Perez', 'kenny.rodriguez@imcabj.gob.mx', 'Planeación estratégica', 'Director Planeación'),
+  ('Luis Angel Mis Ayuso', 'luis.mis@imcabj.gob.mx', 'Planeación estratégica', 'Auxiliar planeacion'),
+  ('Maya Guadarrama Hernandez', 'maya.guadarrama@imcabj.gob.mx', 'Planeación estratégica', 'Coordinadora difusion'),
+  ('Oscar Alvarez Calderon', 'oscar.alvarez@imcabj.gob.mx', 'Planeación estratégica', 'Auxiliar difusion')
+on conflict (correo) do nothing;
+
+-- 4. Enlazar con la cuenta de acceso (solo si el nombre coincide de forma única)
+with cand as (
+  select pc.id as pid, p.id as perf
+  from personal_catalogo pc
+  join perfiles p on txt_clave(p.nombre) = txt_clave(pc.nombre)
+  where pc.perfil_id is null
+),
+uno as (
+  select c.pid, c.perf from cand c
+  where (select count(*) from cand c2 where c2.pid = c.pid) = 1
+    and (select count(*) from cand c3 where c3.perf = c.perf) = 1
+)
+update personal_catalogo pc set perfil_id = u.perf
+from uno u where pc.id = u.pid;
+
+-- 5. Enlazar el personal de Vacaciones con el catálogo
+alter table vac_personal add column if not exists personal_id uuid references personal_catalogo(id);
+
+with cand as (
+  select vp.id as vid, pc.id as pid
+  from vac_personal vp
+  join personal_catalogo pc on txt_clave(pc.nombre) = txt_clave(vp.nombre)
+  where vp.personal_id is null
+),
+uno as (
+  select c.vid, c.pid from cand c
+  where (select count(*) from cand c2 where c2.vid = c.vid) = 1
+    and (select count(*) from cand c3 where c3.pid = c.pid) = 1
+)
+update vac_personal vp set personal_id = u.pid
+from uno u where vp.id = u.vid;
+
+-- 6. Revisión
+-- a) Total del catálogo y cuántas tienen cuenta (esperado: 32 total)
+select count(*) as total, count(perfil_id) as con_cuenta from personal_catalogo;
+-- b) Cuentas que no quedaron enlazadas (revisar: pueden ser otro nombre o gente que ya no está)
+select p.nombre as cuenta_sin_enlazar from perfiles p
+where not exists (select 1 from personal_catalogo pc where pc.perfil_id = p.id);
+-- c) Personal de Vacaciones sin enlazar con el catálogo
+select nombre as vacaciones_sin_enlazar from vac_personal where personal_id is null;

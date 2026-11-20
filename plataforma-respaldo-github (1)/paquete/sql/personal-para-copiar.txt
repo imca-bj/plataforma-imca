@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Personal · IMCA</title>
+<style>
+  :root { --bg:#f4f6f5; --card:#fff; --ink:#1c2321; --muted:#66706d; --line:#e1e6e4;
+    --brand:#27337f; --brand-soft:#e9ebf5; --bad:#b3261e; --bad-soft:#fbe5e3; --ok:#1f7a3f; --radius:14px; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  button, input, select { font:inherit; color:inherit; }
+  .oculto { display:none !important; }
+  header { background:var(--brand); color:#fff; padding:14px 18px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:18px; }
+  header a { color:#fff; font-size:13px; }
+  main { max-width:900px; margin:0 auto; padding:16px; }
+  .tabs { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .tabs button, .btn { border:1px solid var(--line); background:#fff; padding:9px 14px; border-radius:10px; cursor:pointer; }
+  .tabs button.activa { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .btn.principal { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .btn.peligro { color:var(--bad); }
+  .btn:disabled { opacity:.45; cursor:not-allowed; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:12px; }
+  .persona-nombre { font-weight:700; }
+  .persona-correo { color:var(--muted); font-size:13px; margin-bottom:10px; }
+  .fila-modulo { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--line); flex-wrap:wrap; }
+  .fila-modulo select { padding:7px 10px; border:1px solid var(--line); border-radius:8px; min-width:200px; background:#fff; }
+  .layout { display:grid; grid-template-columns: 240px 1fr; gap:14px; }
+  @media (max-width:700px) { .layout { grid-template-columns:1fr; } }
+  .lista-roles button { display:block; width:100%; text-align:left; border:1px solid var(--line); background:#fff; border-radius:10px; padding:9px 12px; margin-bottom:6px; cursor:pointer; }
+  .lista-roles button.activa { border-color:var(--brand); background:var(--brand-soft); }
+  .lista-roles small { color:var(--muted); display:block; }
+  label.campo { display:block; font-size:13px; color:var(--muted); margin:8px 0 4px; }
+  input[type=text] { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; }
+  .bloque-modulo { margin-top:14px; }
+  .bloque-modulo h3 { font-size:14px; margin:0 0 6px; color:var(--brand); }
+  .permiso { display:flex; gap:8px; align-items:center; padding:4px 0; font-size:14px; }
+  .permiso.bloqueado { color:var(--muted); }
+  .acciones { display:flex; gap:8px; justify-content:space-between; margin-top:16px; flex-wrap:wrap; }
+  .aviso { background:var(--bad-soft); color:var(--bad); padding:12px 14px; border-radius:var(--radius); }
+  #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#1c2321; color:#fff; padding:10px 16px; border-radius:10px; display:none; max-width:90vw; }
+  #toast.error { background:var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Personal y roles</h1>
+  <a href="index.html">← Volver al inicio</a>
+</header>
+
+<main>
+  <div id="aviso" class="aviso oculto">Esta pantalla es solo para administradores.</div>
+
+  <div id="contenido" class="oculto">
+    <div class="tabs">
+      <button id="tab-personas" class="activa">Personas</button>
+      <button id="tab-roles">Roles y permisos</button>
+    </div>
+
+    <section id="vista-personas"></section>
+
+    <section id="vista-roles" class="oculto">
+      <div class="layout">
+        <div>
+          <button id="btn-nuevo-rol" class="btn principal" style="width:100%;margin-bottom:10px">+ Nuevo rol</button>
+          <div id="lista-roles" class="lista-roles"></div>
+        </div>
+        <div class="card" id="editor-rol"></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const dato = (res) => { if (res.error) throw new Error(res.error.message); return res.data; };
+
+  let modulos = [], roles = [], permisos = [], rolPerms = {}, personas = [], catalogo = [];
+  let rolEditando = null;   // id del rol abierto en el editor, o '__nuevo__'
+
+  function toast(msg, error) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = error ? 'error' : '';
+    t.style.display = 'block';
+    clearTimeout(t._h);
+    t._h = setTimeout(() => { t.style.display = 'none'; }, 3500);
+  }
+
+  async function iniciar() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { location.href = 'index.html'; return; }
+    const { data: esAdmin, error } = await sb.rpc('es_admin_plataforma');
+    if (error || !esAdmin) { $('aviso').classList.remove('oculto'); return; }
+    $('contenido').classList.remove('oculto');
+    try {
+      await cargarTodo();
+      mostrarVista('personas');
+    } catch (e) { toast(e.message, true); }
+  }
+
+  async function cargarTodo() {
+    const [m, r, p, rp, pe, cat] = await Promise.all([
+      sb.from('acceso_modulos').select('*').eq('activo', true).order('orden'),
+      sb.from('acceso_roles').select('*').order('orden'),
+      sb.from('acceso_permisos').select('*').order('orden'),
+      sb.from('acceso_rol_permisos').select('*'),
+      sb.rpc('acceso_listar_personas'),
+      sb.from('personal_catalogo').select('id,nombre,correo,area,puesto,activo,perfil_id').order('nombre')
+    ]);
+    catalogo = dato(cat);
+    modulos = dato(m);
+    roles = dato(r);
+    permisos = dato(p);
+    rolPerms = {};
+    dato(rp).forEach((x) => {
+      rolPerms[x.rol] = rolPerms[x.rol] || {};
+      (rolPerms[x.rol][x.modulo] = rolPerms[x.rol][x.modulo] || new Set()).add(x.clave);
+    });
+    // Agrupar filas (persona + módulo) por persona
+    const mapa = {};
+    dato(pe).forEach((x) => {
+      mapa[x.perfil_id] = mapa[x.perfil_id] || { id: x.perfil_id, nombre: x.nombre, correo: x.correo, mods: {} };
+      mapa[x.perfil_id].mods[x.modulo] = { rol: x.rol, activo: x.rol_activo };
+    });
+    personas = Object.values(mapa).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }
+
+  function nombreRol(id) {
+    const r = roles.find((x) => x.rol === id);
+    return r ? r.nombre : id;
+  }
+
+  function mostrarVista(v) {
+    $('tab-personas').classList.toggle('activa', v === 'personas');
+    $('tab-roles').classList.toggle('activa', v === 'roles');
+    $('vista-personas').classList.toggle('oculto', v !== 'personas');
+    $('vista-roles').classList.toggle('oculto', v !== 'roles');
+    if (v === 'personas') renderPersonas();
+    if (v === 'roles') renderRoles();
+  }
+
+  // ---------- Personas ----------
+  // Muestra el catálogo completo de personal. Quien tiene cuenta puede recibir roles por módulo.
+  // Quien no tiene cuenta se ve como "Sin cuenta" y se le puede dar una contraseña temporal.
+  function agregarModulos(card, p) {
+    modulos.forEach((m) => {
+      const actual = p.mods[m.codigo] || {};
+      const activo = actual.activo && actual.rol;
+      const fila = document.createElement('div');
+      fila.className = 'fila-modulo';
+      fila.innerHTML = '<span>' + esc(m.nombre) + '</span>';
+      const sel = document.createElement('select');
+      sel.innerHTML = '<option value="">Sin acceso</option>' +
+        roles.map((r) => '<option value="' + esc(r.rol) + '">' + esc(r.nombre) + '</option>').join('');
+      sel.value = activo ? actual.rol : '';
+      sel.addEventListener('change', () => cambiarRol(p, m.codigo, sel.value, actual.rol));
+      fila.appendChild(sel);
+      card.appendChild(fila);
+    });
+  }
+
+  function renderPersonas() {
+    const cont = $('vista-personas');
+    cont.innerHTML = '';
+    if (!catalogo.length && !personas.length) { cont.innerHTML = '<div class="card">No hay personal registrado.</div>'; return; }
+    const porId = {};
+    personas.forEach((p) => { porId[p.id] = p; });
+    const enCatalogo = new Set();
+
+    catalogo.forEach((c) => {
+      // Si la ficha ya tiene cuenta enlazada, se muestra como cuenta aunque aún no tenga módulos
+      const cuenta = c.perfil_id ? (porId[c.perfil_id] || { id: c.perfil_id, nombre: c.nombre, correo: c.correo, mods: {} }) : null;
+      if (cuenta) enCatalogo.add(cuenta.id);
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = '<div class="persona-nombre">' + esc(c.nombre) + '</div>' +
+        '<div class="persona-correo">' + esc([c.correo, c.area, c.puesto].filter(Boolean).join(' · ')) + '</div>' +
+        (cuenta ? '' : '<div class="persona-correo"><strong>Sin cuenta</strong></div>');
+      if (cuenta) agregarModulos(card, cuenta);
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.style.marginTop = '8px';
+      btn.textContent = cuenta ? 'Cambiar contraseña temporal' : 'Dar contraseña temporal';
+      btn.addEventListener('click', () => darClave(c));
+      card.appendChild(btn);
+      cont.appendChild(card);
+    });
+
+    // Cuentas que no están en el catálogo: se muestran igual para no perderlas
+    personas.filter((p) => !enCatalogo.has(p.id)).forEach((p) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = '<div class="persona-nombre">' + esc(p.nombre) + '</div>' +
+        '<div class="persona-correo">' + esc(p.correo || '') + '</div>';
+      agregarModulos(card, p);
+      cont.appendChild(card);
+    });
+  }
+
+  async function darClave(c) {
+    const clave = prompt('Contraseña temporal para ' + c.nombre + ' (mínimo 8 caracteres). La persona la cambiará al entrar:');
+    if (clave === null) return;
+    if (clave.length < 8) { toast('La contraseña debe tener al menos 8 caracteres.', true); return; }
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      const r = await fetch(SUPABASE_URL + '/functions/v1/personal-clave', {
+        method: 'POST',
+        headers: { authorization: 'Bearer ' + session.access_token, apikey: SUPABASE_ANON_KEY, 'content-type': 'application/json' },
+        body: JSON.stringify({ personal_id: c.id, clave: clave })
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'No se pudo guardar la contraseña');
+      toast(j.accion === 'cuenta_creada' ? 'Cuenta creada. Entrégale la contraseña temporal.' : 'Contraseña temporal guardada.');
+      await cargarTodo();
+      renderPersonas();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  async function cambiarRol(persona, modulo, rolNuevo, rolAnterior) {
+    let res;
+    if (rolNuevo) {
+      res = await sb.rpc('acceso_asignar_rol', { p_perfil: persona.id, p_modulo: modulo, p_rol: rolNuevo, p_activo: true });
+    } else {
+      // "Sin acceso" = dejar el módulo desactivado y conservar el rol anterior
+      res = await sb.rpc('acceso_asignar_rol', { p_perfil: persona.id, p_modulo: modulo, p_rol: rolAnterior || 'consulta', p_activo: false });
+    }
+    if (res.error) { toast(res.error.message, true); }
+    else { toast('Cambio guardado'); }
+    await cargarTodo();
+    renderPersonas();
+  }
+
+  // ---------- Roles ----------
+  function slug(texto) {
+    return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+      .replace(/[^a-z]+/g, '_').replace(/^_+|_+$/g, '');
+  }
+
+  function renderRoles() {
+    const lista = $('lista-roles');
+    lista.innerHTML = roles.map((r) => {
+      const n = personas.reduce((acc, p) => acc + Object.values(p.mods).filter((x) => x.rol === r.rol && x.activo).length, 0);
+      return '<button data-rol="' + esc(r.rol) + '" class="' + (rolEditando === r.rol ? 'activa' : '') + '">' +
+        esc(r.nombre) + '<small>' + n + ' asignación(es)</small></button>';
+    }).join('');
+    lista.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      rolEditando = b.dataset.rol;
+      renderRoles();
+    }));
+    if (!rolEditando) rolEditando = roles.length ? roles[0].rol : '__nuevo__';
+    renderEditor();
+  }
+
+  function renderEditor() {
+    const ed = $('editor-rol');
+    const nuevo = rolEditando === '__nuevo__';
+    const rol = nuevo ? { rol: '', nombre: '' } : roles.find((r) => r.rol === rolEditando);
+    if (!rol) { ed.innerHTML = 'Elige un rol.'; return; }
+    const esAdmin = rol.rol === 'administrador';
+    const usados = nuevo ? 0 : personas.reduce((acc, p) => acc + Object.values(p.mods).filter((x) => x.rol === rol.rol && x.activo).length, 0);
+
+    let html = '<label class="campo">Nombre del rol</label>' +
+      '<input type="text" id="rol-nombre" value="' + esc(rol.nombre) + '">';
+    if (nuevo) html += '<div class="persona-correo">Se guardará como: <span id="rol-id-vista">—</span></div>';
+    else html += '<div class="persona-correo">Identificador: ' + esc(rol.rol) + ' · ' + usados + ' persona(s) con este rol</div>';
+
+    modulos.forEach((m) => {
+      html += '<div class="bloque-modulo"><h3>' + esc(m.nombre) + '</h3>';
+      permisos.filter((p) => p.modulo === m.codigo).forEach((p) => {
+        const marcado = rolPerms[rol.rol] && rolPerms[rol.rol][m.codigo] && rolPerms[rol.rol][m.codigo].has(p.clave);
+        const bloqueado = esAdmin && (p.clave === 'administrar_personal' || p.clave === 'administrar_roles');
+        html += '<label class="permiso ' + (bloqueado ? 'bloqueado' : '') + '">' +
+          '<input type="checkbox" data-modulo="' + esc(m.codigo) + '" data-clave="' + esc(p.clave) + '" ' +
+          (marcado || bloqueado ? 'checked ' : '') + (bloqueado ? 'disabled ' : '') + '> ' + esc(p.descripcion) + '</label>';
+      });
+      html += '</div>';
+    });
+
+    html += '<div class="acciones">' +
+      '<button class="btn peligro" id="btn-borrar" ' + ((nuevo || esAdmin || usados > 0) ? 'disabled' : '') + '>Borrar rol</button>' +
+      '<button class="btn principal" id="btn-guardar">Guardar rol</button></div>';
+    if (esAdmin) html += '<div class="persona-correo" style="margin-top:8px">El rol Administrador no se puede borrar y siempre conserva administrar personal y roles.</div>';
+    if (!nuevo && usados > 0) html += '<div class="persona-correo" style="margin-top:8px">Para borrarlo, cambia antes a esas personas a otro rol.</div>';
+    ed.innerHTML = html;
+
+    if (nuevo) {
+      $('rol-nombre').addEventListener('input', () => {
+        $('rol-id-vista').textContent = slug($('rol-nombre').value) || '—';
+      });
+    }
+    $('btn-guardar').addEventListener('click', guardarRol);
+    $('btn-borrar').addEventListener('click', borrarRol);
+  }
+
+  async function guardarRol() {
+    const nuevo = rolEditando === '__nuevo__';
+    const nombre = $('rol-nombre').value.trim();
+    const id = nuevo ? slug(nombre) : rolEditando;
+    if (!nombre) return toast('Escribe el nombre del rol.', true);
+    if (nuevo && !id) return toast('El nombre necesita al menos una letra.', true);
+    if (nuevo && roles.some((r) => r.rol === id)) return toast('Ya existe un rol con ese nombre.', true);
+
+    const permisosJson = {};
+    modulos.forEach((m) => { permisosJson[m.codigo] = []; });
+    document.querySelectorAll('#editor-rol input[type=checkbox]').forEach((cb) => {
+      if (cb.checked) permisosJson[cb.dataset.modulo].push(cb.dataset.clave);
+    });
+
+    const res = await sb.rpc('acceso_guardar_rol', { p_rol: id, p_nombre: nombre, p_permisos: permisosJson });
+    if (res.error) return toast(res.error.message, true);
+    toast('Rol guardado');
+    rolEditando = id;
+    await cargarTodo();
+    renderRoles();
+  }
+
+  async function borrarRol() {
+    const rol = rolEditando;
+    if (!confirm('¿Borrar este rol? Esta acción no se puede deshacer.')) return;
+    const res = await sb.rpc('acceso_borrar_rol', { p_rol: rol });
+    if (res.error) return toast(res.error.message, true);
+    toast('Rol borrado');
+    rolEditando = null;
+    await cargarTodo();
+    renderRoles();
+  }
+
+  $('tab-personas').addEventListener('click', () => mostrarVista('personas'));
+  $('tab-roles').addEventListener('click', () => mostrarVista('roles'));
+  $('btn-nuevo-rol').addEventListener('click', () => { rolEditando = '__nuevo__'; renderRoles(); });
+
+  iniciar();
+</script>
+</body>
+</html>
