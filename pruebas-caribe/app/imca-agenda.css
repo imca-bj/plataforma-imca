@@ -1,0 +1,127 @@
+/* =====================================================================
+   IMCA · Agenda · apariencia minimalista cálida (solo presentación)
+   Se carga DESPUÉS de imca-caribe.css en agenda-atencion.html y
+   agenda-operativo.html. Define las variables compartidas.
+   ===================================================================== */
+:root{
+  --fondo:#F7F6F2; --tarjeta:#FFFFFF; --linea:#E5E4DF;
+  --titulo:#2C3E50; --texto:#4A5568;
+  --salvia:#6B8E78; --salvia-osc:#567562; --salvia-suave:#EEF3EF;
+  --gris-suave:#F1F0EC;
+  --rojo:#B5524A; --rojo-suave:#F8ECEA;
+  --verde-estado:#4E7A62; --verde-suave:#EAF2EC;
+  --ambar:#8A6A2F; --ambar-suave:#F6F1E4;
+  --sombra:0 1px 2px rgba(44,62,80,.05);
+
+  /* Alias que usan las páginas */
+  --bg:var(--fondo); --card:var(--tarjeta); --ink:var(--titulo); --muted:var(--texto); --line:var(--linea);
+  --brand:var(--salvia); --brand-soft:var(--salvia-suave);
+  --ok:var(--verde-estado); --ok-soft:var(--verde-suave);
+  --bad:var(--rojo); --bad-soft:var(--rojo-suave);
+  --warn:var(--ambar); --warn-soft:var(--ambar-suave);
+  --gris-soft:var(--gris-suave); --radius:8px;
+  --turquesa:var(--salvia); --turquesa-osc:var(--salvia-osc); --turquesa-suave:var(--salvia-suave);
+  --laguna:var(--titulo); --laguna-2:var(--titulo);
+  --coral:#A77B5C; --coral-suave:#F5EEE8; --sol:#B8924A; --sol-suave:var(--ambar-suave);
+  --tinta-c:var(--titulo); --gris-c:var(--texto); --linea-c:var(--linea);
+  --arena:var(--fondo); --arena-2:var(--gris-suave); --amanecer:none;
+}
+
+html, body { background:var(--fondo); color:var(--texto); }
+body::before { display:none; }
+h1, h2, h3, h4, header h1 { color:var(--titulo); font-family:"Sora", system-ui, sans-serif; }
+header h1::after, h1::after { background:var(--salvia); }
+
+/* Encabezado: blanco, sin degradados ni brillos */
+header { background:var(--tarjeta); color:var(--titulo); box-shadow:none; border-radius:0;
+  border-bottom:1px solid var(--linea); }
+header::before, header::after { display:none; }
+header h1 { font-weight:600; color:var(--titulo); }
+header .quien { color:var(--texto); background:var(--fondo); border:1px solid var(--linea); border-radius:8px; }
+header a, header button { color:var(--salvia); }
+
+/* Logotipos institucionales: sobre blanco, sin estirar */
+header .marcas { display:flex; align-items:center; gap:12px; background:var(--tarjeta); border:0; border-radius:0;
+  padding:0; box-shadow:none; width:auto; max-width:100%; }
+
+/* Menú: lateral blanco en escritorio, barra blanca en celular */
+nav.tabs { background:var(--tarjeta); border:1px solid var(--linea); box-shadow:var(--sombra); border-radius:12px; }
+nav.tabs button { color:var(--texto); background:none; }
+nav.tabs button svg { stroke:currentColor; }
+nav.tabs button.activo { background:var(--salvia-suave); color:var(--salvia); box-shadow:none; font-weight:650; }
+nav.tabs button.activo svg { stroke:var(--salvia); }
+nav.tabs button.activo span:first-of-type { color:var(--salvia); }
+nav.tabs .badge { background:var(--rojo); color:#fff; }
+
+@media (min-width:900px){
+  nav.tabs { background:var(--tarjeta); border:0; border-right:1px solid var(--linea); border-radius:0;
+    box-shadow:none; }
+  nav.tabs button { color:var(--texto); }
+  nav.tabs button:hover { background:var(--fondo); color:var(--titulo); }
+  nav.tabs button.activo { background:var(--gris-suave); color:var(--salvia); }
+  nav.tabs .badge { background:var(--rojo); color:#fff; }
+  header { background:var(--tarjeta); }
+}
+@media (max-width:899px){
+}
+
+/* Tarjetas, ventanas, formularios */
+.card, .tarjeta, .modal, .stat, .ag-stat, .cita, .barra-fecha, .ag-resumen, .resultados, .sim, .vacio {
+  background:var(--tarjeta); border:1px solid var(--linea); border-radius:8px; box-shadow:var(--sombra); }
+.stat, .ag-stat { background:var(--tarjeta); }
+.stat::after, .ag-stat::after { display:none; }
+.ag-resumen { background:var(--tarjeta); }
+.cita { border-left-width:3px; }
+.cita:hover { transform:none; box-shadow:var(--sombra); }
+.bloqueo { background:var(--gris-suave); border:1px dashed #C9C6BC; border-radius:8px; color:var(--texto); }
+.modal-fondo { background:rgba(44,62,80,.35); backdrop-filter:none; -webkit-backdrop-filter:none; }
+.modal { border-radius:8px; }
+
+input, select, textarea { background:var(--tarjeta); border:1px solid var(--linea); border-radius:8px; color:var(--titulo); }
+input:focus, select:focus, textarea:focus { border-color:var(--salvia); box-shadow:0 0 0 3px rgba(107,142,120,.15); }
+.barra-fecha { background:var(--tarjeta); }
+.barra-fecha input, .barra-fecha .btn { background:var(--tarjeta); border:1px solid var(--linea); border-radius:8px; }
+
+/* Botones */
+.btn, .btn.pri, .btn.ok, .btn-principal {
+  border-radius:8px; box-shadow:none; transition:background .15s, color .15s; }
+.btn { background:var(--tarjeta); color:var(--texto); border:1px solid var(--linea); }
+.btn:hover { background:var(--fondo); }
+.btn.pri, .btn.ok, .btn-principal { background:var(--salvia); border-color:var(--salvia); color:#fff; }
+.btn.pri:hover, .btn.ok:hover, .btn-principal:hover { background:var(--salvia-osc); border-color:var(--salvia-osc); color:#fff; }
+.btn.bad { background:var(--tarjeta); color:var(--rojo); border-color:var(--linea); }
+
+/* Segmentado y filtros */
+.seg { background:var(--gris-suave); border-radius:8px; border:1px solid var(--linea); }
+.seg button.on, .seg .on { background:var(--tarjeta); color:var(--titulo); box-shadow:var(--sombra); }
+.chip.on { background:var(--salvia); color:#fff; }
+.chip.brand { background:var(--salvia-suave); color:var(--salvia-osc); }
+.chip.ok { background:var(--verde-suave); color:#3F6B52; }
+.chip.bad { background:var(--rojo-suave); color:#9A4036; }
+.chip.warn { background:var(--ambar-suave); color:#7D5E22; }
+.seleccion { background:var(--salvia-suave); }
+
+/* Títulos de sección y números */
+.titulo-dia, h2, .ag-resumen h3, .ag-acciones h3, .stat b, .ag-stat b, .cita .hora { color:var(--titulo); }
+.titulo-dia::before { background:var(--coral); }
+.stat b { font-weight:700; }
+
+/* Sin degradados ni brillos */
+.nota, .vacio, .stat small { color:var(--texto); }
+
+/* Logotipos institucionales: proporción original, sin ancho y alto fijos */
+img.logo-institucional {
+  width: auto;
+  height: auto;
+  max-width: 160px;
+  max-height: 40px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  img.logo-institucional {
+    max-width: 120px;
+    max-height: 28px;
+  }
+}

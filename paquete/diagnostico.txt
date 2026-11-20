@@ -1,0 +1,7 @@
+-- DIAGNÓSTICO · Revisar tu usuario y tu perfil
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: ver qué correo tiene tu usuario y si el perfil de administrador existe.
+
+select id, email from auth.users;
+
+select nombre, email, rol, activo from perfiles;

@@ -1,0 +1,7 @@
+-- 09 · Permiso para que la función de Google Calendar lea los roles
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: la función calendario necesita leer la tabla perfiles para saber tu rol.
+-- Se puede correr más de una vez sin causar error.
+
+grant select on perfiles to service_role;
+grant select, insert, update on google_calendario to service_role;

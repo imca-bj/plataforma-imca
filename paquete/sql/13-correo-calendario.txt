@@ -1,0 +1,12 @@
+-- 13 · Agenda operativo: columna para el correo de Gmail que se conecta al calendario
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: agrega un lugar donde guardar el Gmail de cada persona para el calendario.
+-- Las personas inician sesión con su correo institucional (@imcabj.gob.mx); el Gmail se pide una sola vez, en su primer inicio de sesión.
+-- Se puede correr más de una vez sin causar error.
+
+alter table pl_personal add column if not exists correo_calendario text;
+
+-- Verificación: debe mostrar la columna correo_calendario (vacía por ahora)
+select perfil_id, rol, correo_calendario
+from pl_personal
+limit 5;

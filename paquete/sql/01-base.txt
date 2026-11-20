@@ -1,0 +1,36 @@
+-- PASO 1 · Base de la plataforma IMCA
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: crea la tabla de usuarios con su rol y las reglas que
+-- impiden que cada persona vea más de lo que le toca.
+
+create table if not exists perfiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  nombre text not null,
+  email text not null,
+  rol text not null check (rol in ('admin','agenda','coordinacion','terapeuta','consulta','operativo')),
+  activo boolean not null default true,
+  creado timestamptz not null default now()
+);
+
+alter table perfiles enable row level security;
+
+-- Cada usuario puede leer su propio perfil (el sitio lo usa para saber su rol).
+create policy "leer mi perfil"
+  on perfiles for select
+  to authenticated
+  using (id = auth.uid());
+
+-- Función auxiliar: devuelve el rol del usuario que hace la consulta.
+create or replace function mi_rol()
+returns text
+language sql
+stable
+security definer
+as $$
+  select rol from perfiles where id = auth.uid() and activo = true;
+$$;
+
+-- Cuando creen su primer usuario admin en Authentication > Users,
+-- corran esto cambiando el correo y el nombre. Sirve para dar de alta el perfil.
+-- insert into perfiles (id, nombre, email, rol)
+-- select id, 'Alberto Ortuño', email, 'admin' from auth.users where email = 'CORREO@AQUI.com';

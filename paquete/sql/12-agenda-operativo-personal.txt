@@ -1,0 +1,94 @@
+-- 12 · Agenda operativo: crea las cuentas que faltan y asigna el rol de cada persona
+-- Pégalo en Supabase > SQL Editor > New query > Run. No hay que crear usuarios a mano.
+-- Para qué sirve: crea la cuenta de inicio de sesión de las personas nuevas con la contraseña temporal,
+-- y le asigna a cada persona su propio rol y permisos de Agenda operativo (Administrador, Coordinador, Supervisión, Operativo o Técnica).
+-- Si una cuenta ya existe (Alberto, Ana Luisa, Guillermo y Rossy), no la vuelve a crear.
+-- Se puede correr más de una vez sin causar error.
+-- Contraseña temporal para las cuentas nuevas: ImcaTemporal2026!  (cada persona debe cambiarla después)
+
+create extension if not exists pgcrypto;
+
+-- Lista de trabajo: una fila por persona
+create table if not exists pl_altas_tmp (
+  email text primary key,
+  nombre text not null,
+  rol_perfil text not null,
+  rol text not null,
+  convocable boolean not null,
+  ve_dashboard boolean not null,
+  puede_anular boolean not null,
+  puede_descargar boolean not null
+);
+
+delete from pl_altas_tmp;
+
+insert into pl_altas_tmp (email, nombre, rol_perfil, rol, convocable, ve_dashboard, puede_anular, puede_descargar) values
+  ('direccion@imcabj.gob.mx',           'Alberto Ortuño Báez',                'admin',       'administrador', false, true,  true,  true),
+  ('ana.jimenez@imcabj.gob.mx',         'Ana Luisa Jimenez Hernandez',        'admin',       'administrador', false, true,  true,  true),
+  ('juancarlos.farias@imcabj.gob.mx',   'Juan Carlos Farias Pisson',          'admin',       'administrador', true,  true,  false, true),
+  ('guillermo.escobedo@imcabj.gob.mx',  'José Guillermo Escobedo Hernández',  'coordinacion','coordinador',   false, true,  false, false),
+  ('rossy.trevino@imcabj.gob.mx',       'Rosa Isela Trevino Nunez',           'coordinacion','coordinador',   false, true,  false, false),
+  ('luis.mis@imcabj.gob.mx',            'Luis Angel Mis Ayuso',               'consulta',    'supervision',   true,  false, false, false),
+  ('carolina.rebolledo@imcabj.gob.mx',  'Myrna Carolina Rebolledo Chacón',    'consulta',    'tecnica',       false, true,  false, true),
+  ('isrrael.paramo@imcabj.gob.mx',      'Isrrael Paramo Villasana',           'operativo',   'operativo',     true,  false, false, false),
+  ('ivan.villasenor@imcabj.gob.mx',     'Ivan Adiv Villasenor Salas',         'operativo',   'operativo',     true,  false, false, false),
+  ('jazmin.hernandez@imcabj.gob.mx',    'Jazmin Hernandez Rosalino',          'operativo',   'operativo',     true,  false, false, false),
+  ('karina.sanchez@imcabj.gob.mx',      'Nataly Karina Sanchez May',          'operativo',   'operativo',     true,  false, false, false),
+  ('leydi.ek@imcabj.gob.mx',            'Leydi Maria Ek Noh',                 'operativo',   'operativo',     true,  false, false, false),
+  ('lizbeth.jimenez@imcabj.gob.mx',     'Lizbeth Jimenez Gonzalez',           'operativo',   'operativo',     true,  false, false, false),
+  ('nathaly.ramos@imcabj.gob.mx',       'Nidia Nathaly Ramos Garcia',         'operativo',   'operativo',     true,  false, false, false),
+  ('rigoberto.rodriguez@imcabj.gob.mx', 'Rigoberto Rodriguez Sanchez',        'operativo',   'operativo',     true,  false, false, false),
+  ('yesica.cuxim@imcabj.gob.mx',        'Yesica Maria Cuxim Cespedes',        'operativo',   'operativo',     true,  false, false, false),
+  ('nisha.morgan@imcabj.gob.mx',        'Nisha Morgan Fernandez',             'operativo',   'operativo',     true,  false, false, false);
+
+-- Paso 1: cuentas de inicio de sesión que aún no existen
+insert into auth.users (
+  instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+  confirmation_token, recovery_token, email_change_token_new, email_change
+)
+select
+  '00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated',
+  n.email, crypt('ImcaTemporal2026!', gen_salt('bf')), now(),
+  '{"provider":"email","providers":["email"]}', jsonb_build_object('nombre', n.nombre),
+  now(), now(), '', '', '', ''
+from pl_altas_tmp n
+where not exists (select 1 from auth.users u where lower(u.email) = n.email);
+
+-- Paso 2: identidad de correo para las cuentas nuevas
+insert into auth.identities (id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at)
+select gen_random_uuid(), u.id,
+       jsonb_build_object('sub', u.id::text, 'email', u.email, 'email_verified', true),
+       'email', u.id::text, now(), now(), now()
+from auth.users u
+join pl_altas_tmp n on lower(u.email) = n.email
+where not exists (select 1 from auth.identities i where i.user_id = u.id);
+
+-- Paso 3: perfil (nombre y rol de la agenda). Si ya tiene perfil, no lo cambia.
+insert into perfiles (id, nombre, email, rol, activo)
+select u.id, n.nombre, n.email, n.rol_perfil, true
+from auth.users u
+join pl_altas_tmp n on lower(u.email) = n.email
+on conflict (id) do nothing;
+
+-- Paso 4: rol y permisos de Agenda operativo
+insert into pl_personal (perfil_id, rol, convocable, ve_dashboard, puede_anular, puede_descargar, activo)
+select u.id, n.rol, n.convocable, n.ve_dashboard, n.puede_anular, n.puede_descargar, true
+from auth.users u
+join pl_altas_tmp n on lower(u.email) = n.email
+on conflict (perfil_id) do update
+  set rol = excluded.rol,
+      convocable = excluded.convocable,
+      ve_dashboard = excluded.ve_dashboard,
+      puede_anular = excluded.puede_anular,
+      puede_descargar = excluded.puede_descargar,
+      activo = true;
+
+-- Limpieza de la lista de trabajo
+drop table if exists pl_altas_tmp;
+
+-- Verificación: debe mostrar 17 filas
+select p.nombre, p.email, pp.rol, pp.convocable, pp.ve_dashboard, pp.puede_anular, pp.puede_descargar
+from pl_personal pp
+join perfiles p on p.id = pp.perfil_id
+order by pp.rol, p.nombre;

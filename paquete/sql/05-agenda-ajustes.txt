@@ -1,0 +1,70 @@
+-- 05 · Ajustes de la agenda de atención
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: deja ver el nombre del personal para elegir terapeuta, pone números automáticos
+-- a usuarios y citas, guarda el número de seguimiento, permite los estados Cancelada y Reprogramada,
+-- y crea el lugar privado para los oficios adjuntos.
+-- Este archivo se puede correr más de una vez sin causar error.
+
+-- 1) Todo el personal activo puede ver los nombres de sus compañeros.
+drop policy if exists "perfiles leer personal" on perfiles;
+create policy "perfiles leer personal" on perfiles for select to authenticated
+  using (mi_rol() is not null);
+
+-- 2) Números automáticos: P000001 para usuarios y C000001 para citas.
+create sequence if not exists seq_paciente;
+create sequence if not exists seq_cita;
+grant usage on sequence seq_paciente, seq_cita to authenticated;
+
+alter table pacientes alter column numero
+  set default 'P' || lpad(nextval('seq_paciente')::text, 6, '0');
+alter table citas alter column numero
+  set default 'C' || lpad(nextval('seq_cita')::text, 6, '0');
+
+-- 3) Número de seguimiento y estados de asistencia que usa la agenda.
+alter table citas add column if not exists num_seguimiento int;
+alter table citas drop constraint if exists citas_asistencia_check;
+alter table citas add constraint citas_asistencia_check
+  check (asistencia in ('Llegó', 'No llegó', 'Cancelada', 'Reprogramada'));
+
+-- 4) Oficios y documentos adjuntos al usuario (los archivos viven en el depósito privado "oficios").
+create table if not exists adjuntos (
+  id uuid primary key default gen_random_uuid(),
+  paciente_id uuid not null references pacientes(id),
+  cita_id uuid references citas(id),
+  ruta text not null,
+  nombre text not null,
+  tipo text,
+  subio_por uuid references perfiles(id),
+  creado timestamptz not null default now(),
+  activo boolean not null default true
+);
+
+alter table adjuntos enable row level security;
+
+drop policy if exists "adjuntos leer" on adjuntos;
+create policy "adjuntos leer" on adjuntos for select to authenticated
+  using (mi_rol() in ('admin', 'agenda', 'coordinacion', 'terapeuta'));
+
+drop policy if exists "adjuntos subir" on adjuntos;
+create policy "adjuntos subir" on adjuntos for insert to authenticated
+  with check (mi_rol() in ('admin', 'agenda', 'coordinacion', 'terapeuta') and subio_por = auth.uid());
+
+drop policy if exists "adjuntos quitar" on adjuntos;
+create policy "adjuntos quitar" on adjuntos for update to authenticated
+  using (mi_rol() in ('admin', 'agenda'))
+  with check (mi_rol() in ('admin', 'agenda'));
+
+grant select, insert, update on adjuntos to authenticated;
+
+-- 5) Depósito privado para los archivos (no es público: solo se ven con enlace temporal).
+insert into storage.buckets (id, name, public)
+values ('oficios', 'oficios', false)
+on conflict (id) do nothing;
+
+drop policy if exists "oficios leer" on storage.objects;
+create policy "oficios leer" on storage.objects for select to authenticated
+  using (bucket_id = 'oficios' and mi_rol() in ('admin', 'agenda', 'coordinacion', 'terapeuta'));
+
+drop policy if exists "oficios subir" on storage.objects;
+create policy "oficios subir" on storage.objects for insert to authenticated
+  with check (bucket_id = 'oficios' and mi_rol() in ('admin', 'agenda', 'coordinacion', 'terapeuta'));

@@ -1,0 +1,311 @@
+-- 23 · Vacaciones: tablas, saldos y reglas
+-- Correr en Supabase > SQL Editor después del 22. Una sola vez.
+-- Escrituras solo para administradores por ahora; RH y directores se conectan con la pantalla Personal después.
+
+-- 1. Área de cada persona (la hoja solo la tenía para 4 personas)
+alter table vac_personal add column if not exists area text not null default '';
+update vac_personal set area = 'Dirección General' where nombre = 'Alberto Ortuño';
+update vac_personal set area = 'Administrativa'
+  where nombre in ('Jose Guillermo Escobedo', 'Carla Guzmán Lopez Gatell', 'Arturo Alejandro Soto Rincon');
+
+-- 2. Tablas
+create table if not exists vac_feriados (
+  fecha date primary key,
+  descripcion text not null default ''
+);
+
+create table if not exists vac_ausencias (
+  id uuid primary key default gen_random_uuid(),
+  persona_id uuid not null references vac_personal(id),
+  tipo text not null check (tipo in ('Vacaciones', 'Incapacidad', 'Falta', 'Permiso con goce', 'Permiso parcial', 'Permiso sin goce', 'Compensatorio')),
+  fecha_inicio date not null,
+  fecha_fin date not null,
+  dias numeric not null default 0,
+  hora_salida time,
+  hora_regreso time,
+  horas numeric not null default 0,
+  motivo text not null default '',
+  observaciones text not null default '',
+  estatus text not null default 'Registrada' check (estatus in ('Registrada', 'Anulada')),
+  capturado_por uuid,
+  capturado_nombre text not null default '',
+  fecha_captura timestamptz not null default now(),
+  anulado_por uuid,
+  anulado_nombre text not null default '',
+  fecha_anulacion timestamptz,
+  motivo_anulacion text not null default '',
+  check (fecha_fin >= fecha_inicio)
+);
+create index if not exists vac_ausencias_persona on vac_ausencias (persona_id, fecha_inicio);
+
+create table if not exists vac_bitacora (
+  id bigint generated always as identity primary key,
+  fecha timestamptz not null default now(),
+  usuario text not null default '',
+  accion text not null,
+  detalle text not null default ''
+);
+
+-- 3. Seguridad de tablas: solo administradores leen; las escrituras van por funciones
+alter table vac_feriados enable row level security;
+alter table vac_ausencias enable row level security;
+alter table vac_bitacora enable row level security;
+
+drop policy if exists vac_feriados_ver on vac_feriados;
+create policy vac_feriados_ver on vac_feriados for select to authenticated using (es_admin_plataforma());
+drop policy if exists vac_ausencias_ver on vac_ausencias;
+create policy vac_ausencias_ver on vac_ausencias for select to authenticated using (es_admin_plataforma());
+drop policy if exists vac_bitacora_ver on vac_bitacora;
+create policy vac_bitacora_ver on vac_bitacora for select to authenticated using (es_admin_plataforma());
+
+revoke all on vac_feriados, vac_ausencias, vac_bitacora from anon, authenticated;
+grant select on vac_feriados, vac_ausencias, vac_bitacora to authenticated;
+
+-- 4. Funciones auxiliares
+create or replace function vac_exigir_admin()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not es_admin_plataforma() then
+    raise exception 'No tienes permiso para el módulo de vacaciones.';
+  end if;
+end $$;
+
+create or replace function vac_usuario_nombre()
+returns text language sql stable security definer set search_path = public as $$
+  select coalesce((select nombre from perfiles where id = auth.uid()), '');
+$$;
+
+-- Días hábiles: sin sábados, domingos ni feriados
+create or replace function vac_dias_habiles(p_desde date, p_hasta date)
+returns numeric language sql stable security definer set search_path = public as $$
+  select count(*)::numeric
+  from generate_series(p_desde::timestamp, p_hasta::timestamp, interval '1 day') as g(d)
+  where extract(isodow from g.d) < 6
+    and not exists (select 1 from vac_feriados f where f.fecha = g.d::date);
+$$;
+
+-- 5. Saldos del periodo (enero-junio o julio-diciembre) que contiene la fecha
+create or replace function vac_saldos(p_fecha date default current_date)
+returns table (persona_id uuid, nombre text, area text, saldo_inicial integer, tomados numeric, saldo numeric)
+language sql stable security definer set search_path = public as $$
+  with rng as (
+    select make_date(extract(year from p_fecha)::int,
+                     case when extract(month from p_fecha) <= 6 then 1 else 7 end, 1) as desde
+  ),
+  per as (
+    select desde, (desde + interval '6 months' - interval '1 day')::date as hasta from rng
+  )
+  select p.id, p.nombre, p.area, p.saldo_inicial,
+    coalesce(sum(a.dias) filter (where a.tipo = 'Vacaciones' and a.estatus = 'Registrada'), 0) as tomados,
+    p.saldo_inicial - coalesce(sum(a.dias) filter (where a.tipo = 'Vacaciones' and a.estatus = 'Registrada'), 0) as saldo
+  from vac_personal p
+  cross join per
+  left join vac_ausencias a
+    on a.persona_id = p.id and a.fecha_inicio between per.desde and per.hasta
+  where p.activo and es_admin_plataforma()
+  group by p.id, p.nombre, p.area, p.saldo_inicial
+  order by p.nombre;
+$$;
+
+-- 6. Registrar ausencia o permiso
+create or replace function vac_registrar(
+  p_persona uuid,
+  p_tipo text,
+  p_inicio date,
+  p_fin date,
+  p_hora_salida time default null,
+  p_hora_regreso time default null,
+  p_motivo text default '',
+  p_observaciones text default '',
+  p_forzar boolean default false
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+  v_dias numeric := 0;
+  v_horas numeric := 0;
+  v_saldo numeric;
+  v_nombre text;
+begin
+  perform vac_exigir_admin();
+
+  select nombre into v_nombre from vac_personal where id = p_persona and activo;
+  if v_nombre is null then
+    raise exception 'La persona no existe o está inactiva.';
+  end if;
+  if p_tipo not in ('Vacaciones', 'Incapacidad', 'Falta', 'Permiso con goce', 'Permiso parcial', 'Permiso sin goce', 'Compensatorio') then
+    raise exception 'Tipo de ausencia no válido.';
+  end if;
+  if p_inicio is null or p_fin is null or p_fin < p_inicio then
+    raise exception 'Revisa las fechas: la de fin no puede ser antes que la de inicio.';
+  end if;
+
+  if p_tipo = 'Permiso parcial' then
+    if p_fin <> p_inicio then
+      raise exception 'El permiso parcial es de un solo día.';
+    end if;
+    if p_hora_salida is null or p_hora_regreso is null or p_hora_regreso <= p_hora_salida then
+      raise exception 'Indica la hora de salida y la hora de regreso.';
+    end if;
+    v_horas := round(extract(epoch from (p_hora_regreso - p_hora_salida)) / 3600, 2);
+  else
+    p_hora_salida := null;
+    p_hora_regreso := null;
+    v_dias := vac_dias_habiles(p_inicio, p_fin);
+    if v_dias = 0 then
+      raise exception 'El rango no tiene días hábiles.';
+    end if;
+  end if;
+
+  if p_tipo = 'Vacaciones' then
+    p_motivo := '';
+  end if;
+
+  -- No se permiten dos ausencias que se encimen (los permisos parciales sí)
+  if p_tipo <> 'Permiso parcial' and exists (
+    select 1 from vac_ausencias a
+    where a.persona_id = p_persona and a.estatus = 'Registrada'
+      and a.tipo <> 'Permiso parcial'
+      and a.fecha_inicio <= p_fin and a.fecha_fin >= p_inicio
+  ) then
+    raise exception 'Se encima con otra ausencia de esta persona.';
+  end if;
+
+  -- Saldo de vacaciones (el administrador puede forzar)
+  if p_tipo = 'Vacaciones' and not p_forzar then
+    select s.saldo into v_saldo from vac_saldos(p_inicio) s where s.persona_id = p_persona;
+    if v_dias > coalesce(v_saldo, 0) then
+      raise exception 'Saldo insuficiente: quedan % días.', coalesce(v_saldo, 0);
+    end if;
+  end if;
+
+  insert into vac_ausencias (persona_id, tipo, fecha_inicio, fecha_fin, dias, hora_salida, hora_regreso, horas,
+                             motivo, observaciones, capturado_por, capturado_nombre)
+  values (p_persona, p_tipo, p_inicio, p_fin, v_dias, p_hora_salida, p_hora_regreso, v_horas,
+          coalesce(p_motivo, ''), coalesce(p_observaciones, ''), auth.uid(), vac_usuario_nombre())
+  returning id into v_id;
+
+  insert into vac_bitacora (usuario, accion, detalle)
+  values (vac_usuario_nombre(), 'Registró ausencia',
+          v_nombre || ' · ' || p_tipo || ' · ' || p_inicio::text || ' a ' || p_fin::text);
+
+  return v_id;
+end $$;
+
+-- 7. Anular (no borra; queda en el historial)
+create or replace function vac_anular(p_id uuid, p_motivo text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform vac_exigir_admin();
+  if trim(coalesce(p_motivo, '')) = '' then
+    raise exception 'Escribe el motivo de la anulación.';
+  end if;
+  update vac_ausencias
+     set estatus = 'Anulada', anulado_por = auth.uid(), anulado_nombre = vac_usuario_nombre(),
+         fecha_anulacion = now(), motivo_anulacion = trim(p_motivo)
+   where id = p_id and estatus = 'Registrada';
+  if not found then
+    raise exception 'La ausencia no existe o ya está anulada.';
+  end if;
+  insert into vac_bitacora (usuario, accion, detalle)
+  values (vac_usuario_nombre(), 'Anuló ausencia', p_id::text || ' · ' || trim(p_motivo));
+end $$;
+
+-- 8. Personal: alta y cambios (solo administradores)
+create or replace function vac_guardar_persona(
+  p_id uuid,
+  p_nombre text,
+  p_area text,
+  p_fecha_ingreso date,
+  p_saldo_inicial integer,
+  p_activo boolean
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  v_id uuid;
+begin
+  perform vac_exigir_admin();
+  if trim(coalesce(p_nombre, '')) = '' then
+    raise exception 'Escribe el nombre.';
+  end if;
+  if exists (select 1 from vac_personal
+             where lower(nombre) = lower(trim(p_nombre)) and id is distinct from p_id) then
+    raise exception 'Ya existe una persona con ese nombre.';
+  end if;
+  if p_id is null then
+    insert into vac_personal (nombre, area, fecha_ingreso, saldo_inicial, activo)
+    values (trim(p_nombre), trim(coalesce(p_area, '')), p_fecha_ingreso, coalesce(p_saldo_inicial, 10), coalesce(p_activo, true))
+    returning id into v_id;
+  else
+    update vac_personal
+       set nombre = trim(p_nombre), area = trim(coalesce(p_area, '')), fecha_ingreso = p_fecha_ingreso,
+           saldo_inicial = coalesce(p_saldo_inicial, 10), activo = coalesce(p_activo, true)
+     where id = p_id;
+    v_id := p_id;
+  end if;
+  return v_id;
+end $$;
+
+-- Solo se borra si no tiene ausencias; si tiene, se desactiva
+create or replace function vac_eliminar_persona(p_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform vac_exigir_admin();
+  if exists (select 1 from vac_ausencias where persona_id = p_id) then
+    raise exception 'No se puede borrar: tiene ausencias registradas. Desactívala en su lugar.';
+  end if;
+  delete from vac_personal where id = p_id;
+end $$;
+
+-- 9. Feriados
+create or replace function vac_agregar_feriado(p_fecha date, p_descripcion text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform vac_exigir_admin();
+  insert into vac_feriados (fecha, descripcion) values (p_fecha, trim(coalesce(p_descripcion, '')))
+  on conflict (fecha) do update set descripcion = excluded.descripcion;
+end $$;
+
+create or replace function vac_borrar_feriado(p_fecha date)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform vac_exigir_admin();
+  delete from vac_feriados where fecha = p_fecha;
+end $$;
+
+-- Festivos de ley (LFT Art. 74) del año indicado
+create or replace function vac_cargar_feriados_ley(p_anio int)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform vac_exigir_admin();
+  insert into vac_feriados (fecha, descripcion) values
+    (make_date(p_anio, 1, 1), 'Año Nuevo'),
+    (make_date(p_anio, 2, 1) + ((8 - extract(isodow from make_date(p_anio, 2, 1))::int) % 7), 'Día de la Constitución'),
+    (make_date(p_anio, 3, 1) + ((8 - extract(isodow from make_date(p_anio, 3, 1))::int) % 7) + 14, 'Natalicio de Benito Juárez'),
+    (make_date(p_anio, 5, 1), 'Día del Trabajo'),
+    (make_date(p_anio, 9, 16), 'Día de la Independencia'),
+    (make_date(p_anio, 11, 1) + ((8 - extract(isodow from make_date(p_anio, 11, 1))::int) % 7) + 14, 'Revolución Mexicana'),
+    (make_date(p_anio, 12, 25), 'Navidad')
+  on conflict (fecha) do nothing;
+  -- Cambio de poder federal: cada 6 años (2024, 2030, ...)
+  if (p_anio - 2024) % 6 = 0 then
+    insert into vac_feriados (fecha, descripcion)
+    values (make_date(p_anio, 12, 1), 'Transmisión del Poder Ejecutivo Federal')
+    on conflict (fecha) do nothing;
+  end if;
+end $$;
+
+-- 10. Permisos de ejecución: solo usuarios con sesión
+revoke all on function vac_exigir_admin(), vac_usuario_nombre(), vac_dias_habiles(date, date), vac_saldos(date),
+  vac_registrar(uuid, text, date, date, time, time, text, text, boolean), vac_anular(uuid, text),
+  vac_guardar_persona(uuid, text, text, date, integer, boolean), vac_eliminar_persona(uuid),
+  vac_agregar_feriado(date, text), vac_borrar_feriado(date), vac_cargar_feriados_ley(int)
+  from public, anon;
+grant execute on function vac_usuario_nombre(), vac_dias_habiles(date, date), vac_saldos(date),
+  vac_registrar(uuid, text, date, date, time, time, text, text, boolean), vac_anular(uuid, text),
+  vac_guardar_persona(uuid, text, text, date, integer, boolean), vac_eliminar_persona(uuid),
+  vac_agregar_feriado(date, text), vac_borrar_feriado(date), vac_cargar_feriados_ley(int)
+  to authenticated;
+
+-- Verificación: debe dar personas 33
+select count(*) as personas from vac_personal;

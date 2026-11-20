@@ -1,0 +1,19 @@
+-- 36 · Verificar que la 34 y la 35 ya están cargadas
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Debe salir una fila por función. Lo esperado está en la columna "esperado".
+
+select
+  p.proname as funcion,
+  pg_get_functiondef(p.oid) like '%acceso_persona%'      as lee_personal,
+  pg_get_functiondef(p.oid) like '%acceso_rol_atencion%' as sincroniza_atencion,
+  pg_get_functiondef(p.oid) like '%pl_personal%'         as sincroniza_operativo
+from pg_proc p
+where p.pronamespace = 'public'::regnamespace
+  and p.proname in ('mi_rol', 'acceso_rol_atencion', 'acceso_rol_operativo', 'acceso_asignar_rol')
+order by p.proname;
+
+-- Esperado:
+-- acceso_asignar_rol    -> lee_personal = true, sincroniza_atencion = true, sincroniza_operativo = true
+-- acceso_rol_atencion   -> todo false (es solo una traducción)
+-- acceso_rol_operativo  -> todo false (es solo una traducción)
+-- mi_rol                -> lee_personal = true

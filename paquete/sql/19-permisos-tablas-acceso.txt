@@ -1,0 +1,18 @@
+-- 19 · Permisos de lectura para las tablas de acceso (corrige "permission denied for table acceso_modulos")
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: deja que la sesión de la app LEA las tablas acceso_* (las políticas de seguridad ya existen).
+-- Quita la escritura directa: los cambios solo se hacen por las funciones del SQL 18.
+-- Se puede correr más de una vez.
+
+grant usage on schema public to authenticated;
+
+grant select on acceso_modulos, acceso_roles, acceso_permisos, acceso_rol_permisos, acceso_persona to authenticated;
+
+revoke insert, update, delete on acceso_modulos, acceso_roles, acceso_permisos, acceso_rol_permisos, acceso_persona from authenticated, anon;
+revoke all on acceso_modulos, acceso_roles, acceso_permisos, acceso_rol_permisos, acceso_persona from anon;
+
+-- Verificación: debe mostrar las 5 tablas con permiso de lectura para authenticated
+select table_name, privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public' and grantee = 'authenticated' and table_name like 'acceso_%'
+order by table_name, privilege_type;

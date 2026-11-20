@@ -1,0 +1,34 @@
+-- 33 · Permisos base para todos los roles
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para que cualquier persona con rol asignado en un módulo pueda entrar a él.
+-- Cada rol recibe "ver" en Agenda de atención, Agenda operativo, Reportes y Vacaciones.
+-- Coordinador además puede crear y anular en Vacaciones.
+-- Después puedes quitar o agregar casillas en Personal > Roles y permisos.
+
+-- 1. Ver para todos los roles en los cuatro módulos
+insert into acceso_rol_permisos (rol, modulo, clave)
+select r.rol, m.codigo, 'ver'
+from acceso_roles r
+cross join acceso_modulos m
+where m.codigo in ('atencion', 'operativo', 'reportes', 'vacaciones')
+  and exists (select 1 from acceso_permisos p where p.modulo = m.codigo and p.clave = 'ver')
+  and not exists (
+    select 1 from acceso_rol_permisos x
+    where x.rol = r.rol and x.modulo = m.codigo and x.clave = 'ver'
+  );
+
+-- 2. Coordinador: crear y anular en Vacaciones
+insert into acceso_rol_permisos (rol, modulo, clave)
+select 'coordinador', 'vacaciones', c
+from unnest(array['crear', 'anular']) as c
+where not exists (
+  select 1 from acceso_rol_permisos x
+  where x.rol = 'coordinador' and x.modulo = 'vacaciones' and x.clave = c
+);
+
+-- 3. Revisión: cuántos permisos tiene cada rol en Vacaciones
+select rol, string_agg(clave, ', ' order by clave) as permisos_vacaciones
+from acceso_rol_permisos
+where modulo = 'vacaciones'
+group by rol
+order by rol;

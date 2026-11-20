@@ -1,0 +1,292 @@
+-- 11-platicas.txt
+-- Pláticas y eventos del IMCA. Se puede correr más de una vez.
+-- Pegar todo en Supabase > SQL Editor > Run.
+
+-- 1. Personal de pláticas (un registro por persona que usa este módulo)
+create table if not exists pl_personal (
+  perfil_id uuid primary key references perfiles(id) on delete cascade,
+  rol text not null check (rol in ('administrador','coordinador','supervision','operativo','tecnica')),
+  convocable boolean not null default false,
+  ve_dashboard boolean not null default false,
+  puede_anular boolean not null default false,
+  puede_descargar boolean not null default false,
+  activo boolean not null default true
+);
+
+-- 2. Catálogos editables (temas, turnos, tipos de evento, público, qué llevar, cómo se dará)
+create table if not exists pl_catalogo (
+  tipo text not null check (tipo in ('tema','tipo_evento','turno','publico','como_se_da','que_llevar','tipo_lugar')),
+  valor text not null,
+  orden int not null default 0,
+  activo boolean not null default true,
+  primary key (tipo, valor)
+);
+
+-- 3. Lugares (escuelas). La lista completa de Cancún se carga después desde Excel.
+create table if not exists pl_lugares (
+  id uuid primary key default gen_random_uuid(),
+  nivel text not null check (nivel in ('Secundaria','Preparatoria','Universidad','Otro')),
+  nombre text not null,
+  clave text,
+  activa boolean not null default true,
+  unique (nivel, nombre)
+);
+
+-- 4. Folios de reporte: PLA/2026/0001
+create sequence if not exists seq_reporte_pla;
+
+-- 5. Actividades (pláticas y eventos)
+create table if not exists pl_actividades (
+  id uuid primary key default gen_random_uuid(),
+  clase text not null check (clase in ('Plática','Evento')),
+  fecha date not null,
+  horarios jsonb not null default '[]',
+  turno text,
+  lugar_id uuid references pl_lugares(id),
+  lugar_texto text,
+  tipo_lugar text,
+  ubicacion text,
+  publico text,
+  tema text,
+  tipo_evento text,
+  grupos_esperados int,
+  como_se_da text,
+  que_llevar text[] not null default '{}',
+  contacto_nombre text,
+  contacto_puesto text,
+  contacto_telefono text,
+  notas text,
+  estado text not null default 'Programada'
+    check (estado in ('Programada','En proceso','Realizada','Cancelada','No realizada')),
+  programo uuid references perfiles(id),
+  creado timestamptz not null default now(),
+  actualizado timestamptz not null default now()
+);
+
+-- 6. Convocados por actividad (quienes aparecen en la lista de convocados)
+create table if not exists pl_convocados (
+  actividad_id uuid not null references pl_actividades(id) on delete cascade,
+  perfil_id uuid not null references perfiles(id) on delete cascade,
+  primary key (actividad_id, perfil_id)
+);
+
+-- 7. Reportes (uno por actividad)
+create table if not exists pl_reportes (
+  actividad_id uuid primary key references pl_actividades(id) on delete cascade,
+  folio text unique not null default ('PLA/' || extract(year from now())::int || '/' || lpad(nextval('seq_reporte_pla')::text, 4, '0')),
+  num_platicas int not null default 1,
+  grupos jsonb not null default '[]',
+  hay_incidencia text,
+  observaciones text,
+  estado text not null default 'Borrador' check (estado in ('Borrador','Enviado','Anulado')),
+  elaboro uuid references perfiles(id),
+  creado timestamptz not null default now(),
+  enviado timestamptz
+);
+
+-- 8. Fotos y documentos de cada reporte (máximo 3 de cada uno, lo revisa la pantalla)
+create table if not exists pl_archivos (
+  id uuid primary key default gen_random_uuid(),
+  actividad_id uuid not null references pl_actividades(id) on delete cascade,
+  tipo text not null check (tipo in ('foto','documento')),
+  nombre text not null,
+  ruta text not null,
+  subido_por uuid references perfiles(id),
+  creado timestamptz not null default now()
+);
+
+-- Funciones de permiso (security definer evita errores de recursión en RLS)
+create or replace function pl_mi_rol() returns text
+language sql stable security definer set search_path = public as $$
+  select rol from pl_personal where perfil_id = auth.uid() and activo limit 1;
+$$;
+
+create or replace function pl_puede_anular() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select puede_anular from pl_personal where perfil_id = auth.uid() and activo), false);
+$$;
+
+create or replace function pl_ve_actividad(act uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from pl_personal p
+    where p.perfil_id = auth.uid() and p.activo and (
+      p.rol in ('administrador','coordinador','supervision','tecnica')
+      or (p.rol = 'operativo' and exists (
+        select 1 from pl_convocados c where c.actividad_id = act and c.perfil_id = auth.uid()
+      ))
+    )
+  );
+$$;
+
+-- Operativo solo puede cambiar el estado de una actividad; el resto lo cambian los demás roles
+create or replace function pl_control_actividades() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  new.actualizado := now();
+  if pl_mi_rol() = 'operativo' and (
+    new.clase, new.fecha, new.horarios, new.turno, new.lugar_id, new.lugar_texto, new.tipo_lugar,
+    new.ubicacion, new.publico, new.tema, new.tipo_evento, new.grupos_esperados, new.como_se_da,
+    new.que_llevar, new.contacto_nombre, new.contacto_puesto, new.contacto_telefono, new.notas, new.programo
+  ) is distinct from (
+    old.clase, old.fecha, old.horarios, old.turno, old.lugar_id, old.lugar_texto, old.tipo_lugar,
+    old.ubicacion, old.publico, old.tema, old.tipo_evento, old.grupos_esperados, old.como_se_da,
+    old.que_llevar, old.contacto_nombre, old.contacto_puesto, old.contacto_telefono, old.notas, old.programo
+  ) then
+    raise exception 'Como operativo solo puedes cambiar si la actividad se llevó a cabo.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists pl_actividades_control on pl_actividades;
+create trigger pl_actividades_control before update on pl_actividades
+  for each row execute function pl_control_actividades();
+
+-- Solo Ana Luisa y Alberto pueden anular un reporte
+create or replace function pl_control_reportes() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.estado = 'Anulado' and old.estado is distinct from 'Anulado' and not pl_puede_anular() then
+    raise exception 'Solo Ana Luisa y Alberto pueden anular un reporte.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists pl_reportes_control on pl_reportes;
+create trigger pl_reportes_control before update on pl_reportes
+  for each row execute function pl_control_reportes();
+
+-- Activar seguridad por fila
+alter table pl_personal enable row level security;
+alter table pl_catalogo enable row level security;
+alter table pl_lugares enable row level security;
+alter table pl_actividades enable row level security;
+alter table pl_convocados enable row level security;
+alter table pl_reportes enable row level security;
+alter table pl_archivos enable row level security;
+
+-- Personal: todos leen, solo administrador escribe
+drop policy if exists "pl_personal leer" on pl_personal;
+create policy "pl_personal leer" on pl_personal for select to authenticated using (true);
+drop policy if exists "pl_personal admin" on pl_personal;
+create policy "pl_personal admin" on pl_personal for all to authenticated
+  using (pl_mi_rol() = 'administrador') with check (pl_mi_rol() = 'administrador');
+
+-- Catálogos y lugares: todos leen, solo administrador escribe
+drop policy if exists "pl_catalogo leer" on pl_catalogo;
+create policy "pl_catalogo leer" on pl_catalogo for select to authenticated using (true);
+drop policy if exists "pl_catalogo admin" on pl_catalogo;
+create policy "pl_catalogo admin" on pl_catalogo for all to authenticated
+  using (pl_mi_rol() = 'administrador') with check (pl_mi_rol() = 'administrador');
+
+drop policy if exists "pl_lugares leer" on pl_lugares;
+create policy "pl_lugares leer" on pl_lugares for select to authenticated using (true);
+drop policy if exists "pl_lugares admin" on pl_lugares;
+create policy "pl_lugares admin" on pl_lugares for all to authenticated
+  using (pl_mi_rol() = 'administrador') with check (pl_mi_rol() = 'administrador');
+
+-- Actividades
+drop policy if exists "pl_actividades leer" on pl_actividades;
+create policy "pl_actividades leer" on pl_actividades for select to authenticated
+  using (pl_ve_actividad(id));
+drop policy if exists "pl_actividades crear" on pl_actividades;
+create policy "pl_actividades crear" on pl_actividades for insert to authenticated
+  with check (pl_mi_rol() in ('administrador','coordinador','supervision'));
+drop policy if exists "pl_actividades editar" on pl_actividades;
+create policy "pl_actividades editar" on pl_actividades for update to authenticated
+  using (pl_mi_rol() in ('administrador','coordinador','supervision') or (pl_mi_rol() = 'operativo' and pl_ve_actividad(id)))
+  with check (pl_mi_rol() in ('administrador','coordinador','supervision') or (pl_mi_rol() = 'operativo' and pl_ve_actividad(id)));
+drop policy if exists "pl_actividades borrar" on pl_actividades;
+create policy "pl_actividades borrar" on pl_actividades for delete to authenticated
+  using (pl_mi_rol() = 'administrador');
+
+-- Convocados
+drop policy if exists "pl_convocados leer" on pl_convocados;
+create policy "pl_convocados leer" on pl_convocados for select to authenticated
+  using (pl_ve_actividad(actividad_id));
+drop policy if exists "pl_convocados escribir" on pl_convocados;
+create policy "pl_convocados escribir" on pl_convocados for all to authenticated
+  using (pl_mi_rol() in ('administrador','coordinador','supervision'))
+  with check (pl_mi_rol() in ('administrador','coordinador','supervision'));
+
+-- Reportes
+drop policy if exists "pl_reportes leer" on pl_reportes;
+create policy "pl_reportes leer" on pl_reportes for select to authenticated
+  using (pl_ve_actividad(actividad_id));
+drop policy if exists "pl_reportes crear" on pl_reportes;
+create policy "pl_reportes crear" on pl_reportes for insert to authenticated
+  with check (pl_mi_rol() in ('administrador','coordinador','supervision') or (pl_mi_rol() = 'operativo' and pl_ve_actividad(actividad_id)));
+drop policy if exists "pl_reportes editar" on pl_reportes;
+create policy "pl_reportes editar" on pl_reportes for update to authenticated
+  using (pl_mi_rol() in ('administrador','coordinador','supervision') or (pl_mi_rol() = 'operativo' and pl_ve_actividad(actividad_id)))
+  with check (pl_mi_rol() in ('administrador','coordinador','supervision') or (pl_mi_rol() = 'operativo' and pl_ve_actividad(actividad_id)));
+drop policy if exists "pl_reportes borrar" on pl_reportes;
+create policy "pl_reportes borrar" on pl_reportes for delete to authenticated
+  using (pl_mi_rol() = 'administrador');
+
+-- Archivos de reporte
+drop policy if exists "pl_archivos leer" on pl_archivos;
+create policy "pl_archivos leer" on pl_archivos for select to authenticated
+  using (pl_ve_actividad(actividad_id));
+drop policy if exists "pl_archivos subir" on pl_archivos;
+create policy "pl_archivos subir" on pl_archivos for insert to authenticated
+  with check (pl_mi_rol() in ('administrador','coordinador','supervision') or (pl_mi_rol() = 'operativo' and pl_ve_actividad(actividad_id)));
+drop policy if exists "pl_archivos borrar" on pl_archivos;
+create policy "pl_archivos borrar" on pl_archivos for delete to authenticated
+  using (pl_mi_rol() = 'administrador');
+
+-- Permisos explícitos para la página (la tabla no se expone sola)
+grant select, insert, update, delete on pl_personal, pl_catalogo, pl_lugares, pl_actividades,
+  pl_convocados, pl_reportes, pl_archivos to authenticated;
+grant usage, select on sequence seq_reporte_pla to authenticated;
+
+-- Carpeta privada para fotos y documentos. Cada archivo va en una carpeta con el id de la actividad.
+insert into storage.buckets (id, name, public) values ('pl-archivos', 'pl-archivos', false)
+  on conflict (id) do nothing;
+
+drop policy if exists "pl archivos leer" on storage.objects;
+create policy "pl archivos leer" on storage.objects for select to authenticated
+  using (bucket_id = 'pl-archivos' and pl_ve_actividad(((storage.foldername(name))[1])::uuid));
+drop policy if exists "pl archivos subir" on storage.objects;
+create policy "pl archivos subir" on storage.objects for insert to authenticated
+  with check (bucket_id = 'pl-archivos' and (pl_mi_rol() in ('administrador','coordinador','supervision')
+    or (pl_mi_rol() = 'operativo' and pl_ve_actividad(((storage.foldername(name))[1])::uuid))));
+drop policy if exists "pl archivos borrar" on storage.objects;
+create policy "pl archivos borrar" on storage.objects for delete to authenticated
+  using (bucket_id = 'pl-archivos' and pl_mi_rol() = 'administrador');
+
+-- Catálogos iniciales (lo que se ve en la app actual)
+insert into pl_catalogo (tipo, valor, orden) values
+  ('tema','Prevención y concientización en materia de adicciones',1),
+  ('tema','Taller de salud mental, adicciones, bullying, cutting y suicidio.',2),
+  ('tema','Jornada de salud mental.',3),
+  ('tema','Salud mental. Adicciones. Suicidio.',4),
+  ('tema','4 voces 4 historias',5),
+  ('turno','Matutino',1),
+  ('turno','Vespertino',2),
+  ('turno','Ambos',3),
+  ('turno','Modular',4),
+  ('publico','Alumnos',1),
+  ('publico','Trabajadores',2),
+  ('tipo_evento','Feria de la legalidad',1),
+  ('tipo_evento','El futbol nos une',2),
+  ('tipo_evento','Cancún nos une',3),
+  ('tipo_evento','Feria de la Paz',4),
+  ('tipo_evento','Jornada de bienestar',5),
+  ('tipo_evento','Otro',6),
+  ('como_se_da','Pláticas simultáneas',1),
+  ('como_se_da','Biblioteca',2),
+  ('como_se_da','Un solo salón',3),
+  ('como_se_da','Varios salones',4),
+  ('que_llevar','Proyector',1),
+  ('que_llevar','Bocina',2),
+  ('que_llevar','Micrófono',3),
+  ('que_llevar','Laptop',4),
+  ('que_llevar','Mesas',5),
+  ('que_llevar','Sillas',6),
+  ('que_llevar','Juegos',7),
+  ('que_llevar','Listas',8),
+  ('que_llevar','Módulo',9)
+on conflict (tipo, valor) do nothing;

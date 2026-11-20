@@ -1,0 +1,9 @@
+-- DIAGNÓSTICO 2 · Revisar que tu usuario y tu perfil sean la misma persona
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: ver si el id de tu usuario es igual al id del perfil, y si la regla que permite leer tu perfil existe.
+
+select u.email, u.id as id_usuario, p.id as id_perfil, p.id = u.id as coinciden
+from auth.users u
+left join perfiles p on p.id = u.id;
+
+select policyname, cmd from pg_policies where tablename = 'perfiles';

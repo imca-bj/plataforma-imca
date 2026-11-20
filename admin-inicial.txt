@@ -1,0 +1,9 @@
+-- PASO 2 · Perfil de administrador
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve: le da a tu usuario el rol de administrador en la plataforma.
+-- Requisito: haber creado tu usuario en Authentication > Users (Paso 7).
+
+insert into perfiles (id, nombre, email, rol)
+select id, 'Alberto Ortuño Báez', email, 'admin'
+from auth.users
+where email = 'direccion@imcabj.gob.mx';

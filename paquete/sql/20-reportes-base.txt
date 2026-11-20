@@ -1,0 +1,425 @@
+-- 20 · Reportes IMCA, BASE DE DATOS (tablas, catálogos, permisos y funciones)
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Corre primero el 17, 18 y 19.
+-- Para qué sirve: crea las tablas de reportes (reportes, personas atendidas, seguimientos, historial y catálogos)
+-- con las reglas de permisos del Personal. Quien no tenga permiso no puede leer ni cambiar nada.
+-- Los reportes NO se asignan a personas: cualquiera del departamento con permiso puede tomar el reporte.
+-- No borra reportes: igual que antes, los reportes de prueba solo se borran desde la base.
+-- Se puede correr más de una vez.
+
+-- 1. Permisos nuevos del módulo Reportes (se suman a los generales)
+--    Se quita 'borrar' de Reportes porque en la app no se borran reportes.
+delete from acceso_permisos where modulo = 'reportes' and clave = 'borrar';
+
+insert into acceso_permisos (modulo, clave, descripcion, orden) values
+  ('reportes', 'ver_operativo', 'Ver reportes del departamento Operativo', 20),
+  ('reportes', 'ver_atencion', 'Ver reportes del departamento Atención', 21),
+  ('reportes', 'ver_todo_departamentos', 'Ver todos los departamentos y filtrar', 22),
+  ('reportes', 'ver_anulados', 'Ver reportes anulados', 23),
+  ('reportes', 'editar_cerrados', 'Editar reportes ya cerrados o atendidos', 24),
+  ('reportes', 'cambiar_departamento', 'Cambiar el departamento de un reporte', 25),
+  ('reportes', 'atender', 'Atender reportes y cerrar la atención', 26),
+  ('reportes', 'editar_catalogos', 'Editar las listas (catálogos)', 27)
+on conflict (modulo, clave) do nothing;
+
+-- Permisos de Reportes para Administrador (todo) y Coordinador (todo menos personal, roles y configuración)
+insert into acceso_rol_permisos (rol, modulo, clave)
+select 'administrador', p.modulo, p.clave from acceso_permisos p where p.modulo = 'reportes'
+on conflict do nothing;
+
+insert into acceso_rol_permisos (rol, modulo, clave)
+select 'coordinador', p.modulo, p.clave from acceso_permisos p
+where p.modulo = 'reportes' and p.clave not in ('administrar_personal', 'administrar_roles', 'configurar')
+on conflict do nothing;
+
+-- Permisos de Reportes para Terapeuta (departamento Atención) y Operativo (departamento Operativo)
+insert into acceso_rol_permisos (rol, modulo, clave) values
+  ('terapeuta', 'reportes', 'ver'), ('terapeuta', 'reportes', 'ver_atencion'),
+  ('terapeuta', 'reportes', 'crear'), ('terapeuta', 'reportes', 'editar'),
+  ('terapeuta', 'reportes', 'atender'), ('terapeuta', 'reportes', 'descargar'),
+  ('operativo', 'reportes', 'ver'), ('operativo', 'reportes', 'ver_operativo'),
+  ('operativo', 'reportes', 'crear'), ('operativo', 'reportes', 'editar'),
+  ('operativo', 'reportes', 'atender'), ('operativo', 'reportes', 'descargar')
+on conflict do nothing;
+
+-- 2. Tablas
+create table if not exists rep_catalogos (
+  clave text primary key,
+  valores jsonb not null default '[]'::jsonb,
+  actualizado timestamptz not null default now()
+);
+
+create table if not exists rep_reportes (
+  id uuid primary key default gen_random_uuid(),
+  folio text not null unique,
+  anio int not null,
+  estatus text not null default 'Pendiente'
+    check (estatus in ('Pendiente', 'Atendido', 'No localizado', 'Anulado')),
+  departamento text not null default 'Operativo'
+    check (departamento in ('Operativo', 'Atención')),
+  prioridad text not null check (prioridad in ('Alta', 'Media', 'Baja')),
+  descripcion text not null,
+  instrucciones text,
+  lugar text,
+  colonia text,
+  supermanzana text,
+  tipo_usuario text,
+  elaboro_id uuid references perfiles(id) on delete set null,
+  elaboro_nombre text,
+  creado timestamptz not null default now(),
+  atiende_id uuid references perfiles(id) on delete set null,
+  atiende_nombre text,
+  inicio_atencion timestamptz,
+  cerro_id uuid references perfiles(id) on delete set null,
+  cerro_nombre text,
+  fecha_cierre timestamptz,
+  anulo_id uuid references perfiles(id) on delete set null,
+  anulo_nombre text,
+  fecha_anulacion timestamptz,
+  motivo_anulacion text,
+  actualizado timestamptz not null default now(),
+  datos jsonb not null default '{}'::jsonb
+);
+
+create table if not exists rep_personas (
+  id uuid primary key default gen_random_uuid(),
+  reporte_id uuid not null references rep_reportes(id) on delete cascade,
+  num int not null,
+  datos jsonb not null default '{}'::jsonb,
+  unique (reporte_id, num)
+);
+
+create table if not exists rep_seguimientos (
+  id uuid primary key default gen_random_uuid(),
+  reporte_id uuid not null references rep_reportes(id) on delete cascade,
+  fecha timestamptz not null default now(),
+  perfil_id uuid references perfiles(id) on delete set null,
+  autor_nombre text,
+  nota text not null check (char_length(nota) <= 3000),
+  fotos jsonb not null default '[]'::jsonb
+);
+
+create table if not exists rep_historial (
+  id bigint generated always as identity primary key,
+  reporte_id uuid not null references rep_reportes(id) on delete cascade,
+  fecha timestamptz not null default now(),
+  perfil_id uuid references perfiles(id) on delete set null,
+  usuario_nombre text,
+  accion text not null,
+  detalle text
+);
+
+-- 3. Seguridad: activar RLS. Nadie escribe directo en las tablas; todo pasa por las funciones.
+alter table rep_catalogos enable row level security;
+alter table rep_reportes enable row level security;
+alter table rep_personas enable row level security;
+alter table rep_seguimientos enable row level security;
+alter table rep_historial enable row level security;
+
+revoke all on rep_catalogos, rep_reportes, rep_personas, rep_seguimientos, rep_historial from anon;
+revoke insert, update, delete on rep_catalogos, rep_reportes, rep_personas, rep_seguimientos, rep_historial from authenticated;
+grant select on rep_catalogos, rep_reportes, rep_personas, rep_seguimientos, rep_historial to authenticated;
+
+-- 4. Funciones de permiso
+-- ¿La persona que entra tiene este permiso en el módulo Reportes? (rol activo y persona activa)
+create or replace function rep_tiene(p_clave text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from acceso_persona a
+    join perfiles p on p.id = a.perfil_id
+    join acceso_rol_permisos rp on rp.rol = a.rol and rp.modulo = a.modulo
+    where a.perfil_id = auth.uid()
+      and a.modulo = 'reportes'
+      and a.activo
+      and p.activo
+      and rp.clave = p_clave
+  );
+$$;
+
+-- ¿Puede ver este reporte según su departamento y su estatus?
+create or replace function rep_puede_ver(p_depto text, p_estatus text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select rep_tiene('ver')
+     and (p_estatus <> 'Anulado' or rep_tiene('ver_anulados'))
+     and (
+          rep_tiene('ver_todo_departamentos')
+       or (p_depto = 'Operativo' and rep_tiene('ver_operativo'))
+       or (p_depto = 'Atención' and rep_tiene('ver_atencion'))
+     );
+$$;
+
+create or replace function rep_mi_nombre()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select nombre from perfiles where id = auth.uid()), 'Usuario');
+$$;
+
+-- 5. Lectura: cada tabla solo muestra lo que la persona puede ver
+drop policy if exists "rep catalogos leer" on rep_catalogos;
+create policy "rep catalogos leer" on rep_catalogos for select to authenticated using (true);
+
+drop policy if exists "rep reportes leer" on rep_reportes;
+create policy "rep reportes leer" on rep_reportes for select to authenticated
+  using (rep_puede_ver(departamento, estatus));
+
+drop policy if exists "rep personas leer" on rep_personas;
+create policy "rep personas leer" on rep_personas for select to authenticated
+  using (exists (select 1 from rep_reportes r where r.id = rep_personas.reporte_id));
+
+drop policy if exists "rep seguimientos leer" on rep_seguimientos;
+create policy "rep seguimientos leer" on rep_seguimientos for select to authenticated
+  using (exists (select 1 from rep_reportes r where r.id = rep_seguimientos.reporte_id));
+
+drop policy if exists "rep historial leer" on rep_historial;
+create policy "rep historial leer" on rep_historial for select to authenticated
+  using (exists (select 1 from rep_reportes r where r.id = rep_historial.reporte_id));
+
+-- 6. Funciones de escritura
+
+-- 6a. Crear reporte (asigna el folio REP/AAAA/00000)
+create or replace function rep_crear(p_prioridad text, p_departamento text, p_descripcion text, p_datos jsonb)
+returns table (r_id uuid, r_folio text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_anio int;
+  v_n int;
+  v_folio text;
+  v_id uuid;
+  v_nombre text := rep_mi_nombre();
+begin
+  if not rep_tiene('crear') then raise exception 'No tienes permiso para crear reportes.'; end if;
+  if p_prioridad not in ('Alta', 'Media', 'Baja') then raise exception 'La prioridad no es válida.'; end if;
+  if p_departamento not in ('Operativo', 'Atención') then raise exception 'El departamento no es válido.'; end if;
+  if btrim(coalesce(p_descripcion, '')) = '' then raise exception 'Escribe la descripción del reporte.'; end if;
+
+  v_anio := extract(year from (now() at time zone 'America/Cancun'))::int;
+  select coalesce(max(substring(x.folio from '([0-9]+)$')::int), 0) + 1 into v_n
+  from rep_reportes x where x.anio = v_anio;
+  v_folio := 'REP/' || v_anio || '/' || lpad(v_n::text, 5, '0');
+
+  insert into rep_reportes (folio, anio, prioridad, departamento, descripcion, instrucciones,
+    lugar, colonia, supermanzana, tipo_usuario, elaboro_id, elaboro_nombre, datos)
+  values (v_folio, v_anio, p_prioridad, p_departamento, btrim(p_descripcion),
+    p_datos ->> 'instrucciones', p_datos ->> 'lugar', p_datos ->> 'colonia',
+    p_datos ->> 'supermanzana', p_datos ->> 'tipo_usuario', auth.uid(), v_nombre, coalesce(p_datos, '{}'::jsonb))
+  returning rep_reportes.id into v_id;
+
+  insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+  values (v_id, auth.uid(), v_nombre, 'Registro', 'Reporte creado');
+
+  return query select v_id, v_folio;
+end;
+$$;
+
+-- 6b. Editar datos de recepción (solo si no está cerrado, salvo permiso de editar cerrados)
+create or replace function rep_editar(p_id uuid, p_departamento text, p_datos jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r rep_reportes%rowtype;
+  v_cambios text;
+begin
+  if not rep_tiene('editar') then raise exception 'No tienes permiso para editar reportes.'; end if;
+  select * into r from rep_reportes where id = p_id for update;
+  if not found or not rep_puede_ver(r.departamento, r.estatus) then raise exception 'El reporte no existe.'; end if;
+  if r.estatus = 'Anulado' then raise exception 'Un reporte anulado no se puede editar.'; end if;
+  if r.estatus <> 'Pendiente' and not rep_tiene('editar_cerrados') then
+    raise exception 'Este reporte ya está cerrado.';
+  end if;
+  if p_departamento is not null and p_departamento <> r.departamento then
+    if not rep_tiene('cambiar_departamento') then raise exception 'No puedes cambiar el departamento.'; end if;
+    if p_departamento not in ('Operativo', 'Atención') then raise exception 'El departamento no es válido.'; end if;
+  end if;
+  if p_datos ? 'descripcion' and btrim(coalesce(p_datos ->> 'descripcion', '')) = '' then
+    raise exception 'La descripción no puede quedar vacía.';
+  end if;
+
+  update rep_reportes set
+    datos = datos || coalesce(p_datos, '{}'::jsonb),
+    departamento = coalesce(p_departamento, departamento),
+    prioridad = coalesce(p_datos ->> 'prioridad', prioridad),
+    descripcion = coalesce(btrim(p_datos ->> 'descripcion'), descripcion),
+    instrucciones = coalesce(p_datos ->> 'instrucciones', instrucciones),
+    lugar = coalesce(p_datos ->> 'lugar', lugar),
+    colonia = coalesce(p_datos ->> 'colonia', colonia),
+    supermanzana = coalesce(p_datos ->> 'supermanzana', supermanzana),
+    tipo_usuario = coalesce(p_datos ->> 'tipo_usuario', tipo_usuario),
+    actualizado = now()
+  where id = p_id;
+
+  select string_agg(k, ', ') into v_cambios from jsonb_object_keys(coalesce(p_datos, '{}'::jsonb)) k;
+  insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+  values (p_id, auth.uid(), rep_mi_nombre(), 'Edición', 'Campos: ' || coalesce(v_cambios, '(ninguno)'));
+end;
+$$;
+
+-- 6c. Guardar atención (avance o cierre) y reemplazar las personas atendidas
+--     p_resultado: 'Atendido' o 'No localizado' cuando p_terminar es true
+create or replace function rep_guardar_atencion(
+  p_id uuid, p_datos jsonb, p_personas jsonb, p_terminar boolean, p_resultado text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r rep_reportes%rowtype;
+begin
+  if not rep_tiene('atender') then raise exception 'No tienes permiso para atender reportes.'; end if;
+  select * into r from rep_reportes where id = p_id for update;
+  if not found or not rep_puede_ver(r.departamento, r.estatus) then raise exception 'El reporte no existe.'; end if;
+  if r.estatus = 'Anulado' then raise exception 'Un reporte anulado no se puede atender.'; end if;
+  if r.estatus <> 'Pendiente' and not rep_tiene('editar_cerrados') then
+    raise exception 'Este reporte ya está cerrado.';
+  end if;
+  if jsonb_array_length(coalesce(p_personas, '[]'::jsonb)) > 40 then
+    raise exception 'Máximo 40 personas por reporte.';
+  end if;
+  if coalesce(p_terminar, false) and p_resultado not in ('Atendido', 'No localizado') then
+    raise exception 'El resultado de cierre no es válido.';
+  end if;
+
+  update rep_reportes set
+    datos = datos || coalesce(p_datos, '{}'::jsonb),
+    atiende_id = coalesce(atiende_id, auth.uid()),
+    atiende_nombre = coalesce(atiende_nombre, rep_mi_nombre()),
+    inicio_atencion = coalesce(inicio_atencion, now()),
+    estatus = case when coalesce(p_terminar, false) then p_resultado else estatus end,
+    cerro_id = case when coalesce(p_terminar, false) then auth.uid() else cerro_id end,
+    cerro_nombre = case when coalesce(p_terminar, false) then rep_mi_nombre() else cerro_nombre end,
+    fecha_cierre = case when coalesce(p_terminar, false) then now() else fecha_cierre end,
+    actualizado = now()
+  where id = p_id;
+
+  delete from rep_personas where reporte_id = p_id;
+  insert into rep_personas (reporte_id, num, datos)
+  select p_id, t.ord::int, t.val
+  from jsonb_array_elements(coalesce(p_personas, '[]'::jsonb)) with ordinality as t(val, ord);
+
+  insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+  values (p_id, auth.uid(), rep_mi_nombre(),
+    case when coalesce(p_terminar, false) then 'Cierre de atención' else 'Atención' end,
+    case when coalesce(p_terminar, false) then 'Resultado: ' || p_resultado else 'Avance guardado' end);
+end;
+$$;
+
+-- 6d. Anular (motivo obligatorio, mínimo 5 caracteres). No borra el reporte.
+create or replace function rep_anular(p_id uuid, p_motivo text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r rep_reportes%rowtype;
+begin
+  if not rep_tiene('anular') then raise exception 'No tienes permiso para anular reportes.'; end if;
+  if char_length(btrim(coalesce(p_motivo, ''))) < 5 then raise exception 'Escribe el motivo (mínimo 5 caracteres).'; end if;
+  select * into r from rep_reportes where id = p_id for update;
+  if not found or not rep_puede_ver(r.departamento, r.estatus) then raise exception 'El reporte no existe.'; end if;
+  if r.estatus = 'Anulado' then raise exception 'El reporte ya está anulado.'; end if;
+
+  update rep_reportes set
+    estatus = 'Anulado',
+    anulo_id = auth.uid(),
+    anulo_nombre = rep_mi_nombre(),
+    fecha_anulacion = now(),
+    motivo_anulacion = btrim(p_motivo),
+    actualizado = now()
+  where id = p_id;
+
+  insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+  values (p_id, auth.uid(), rep_mi_nombre(), 'Anulación', btrim(p_motivo));
+end;
+$$;
+
+-- 6e. Agregar seguimiento (nota de hasta 3000 caracteres; no se agrega a reportes anulados)
+create or replace function rep_agregar_seguimiento(p_id uuid, p_nota text, p_fotos jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r rep_reportes%rowtype;
+begin
+  if not rep_tiene('crear') then raise exception 'No tienes permiso para agregar seguimientos.'; end if;
+  if btrim(coalesce(p_nota, '')) = '' then raise exception 'Escribe la nota del seguimiento.'; end if;
+  select * into r from rep_reportes where id = p_id;
+  if not found or not rep_puede_ver(r.departamento, r.estatus) then raise exception 'El reporte no existe.'; end if;
+  if r.estatus = 'Anulado' then raise exception 'No se pueden agregar seguimientos a un reporte anulado.'; end if;
+
+  insert into rep_seguimientos (reporte_id, perfil_id, autor_nombre, nota, fotos)
+  values (p_id, auth.uid(), rep_mi_nombre(), btrim(p_nota), coalesce(p_fotos, '[]'::jsonb));
+
+  insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+  values (p_id, auth.uid(), rep_mi_nombre(), 'Seguimiento', 'Nota agregada');
+end;
+$$;
+
+-- 6f. Guardar una lista (catálogo). Solo quien tenga 'editar_catalogos'.
+create or replace function rep_guardar_catalogo(p_clave text, p_valores jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not rep_tiene('editar_catalogos') then raise exception 'No tienes permiso para editar las listas.'; end if;
+  if jsonb_typeof(p_valores) <> 'array' then raise exception 'Los valores deben ser una lista.'; end if;
+  insert into rep_catalogos (clave, valores, actualizado) values (p_clave, p_valores, now())
+  on conflict (clave) do update set valores = excluded.valores, actualizado = now();
+end;
+$$;
+
+grant execute on function rep_tiene(text) to authenticated;
+grant execute on function rep_puede_ver(text, text) to authenticated;
+grant execute on function rep_mi_nombre() to authenticated;
+grant execute on function rep_crear(text, text, text, jsonb) to authenticated;
+grant execute on function rep_editar(uuid, text, jsonb) to authenticated;
+grant execute on function rep_guardar_atencion(uuid, jsonb, jsonb, boolean, text) to authenticated;
+grant execute on function rep_anular(uuid, text) to authenticated;
+grant execute on function rep_agregar_seguimiento(uuid, text, jsonb) to authenticated;
+grant execute on function rep_guardar_catalogo(text, jsonb) to authenticated;
+
+-- 7. Listas iniciales (de la configuración actual; editables desde la app)
+insert into rep_catalogos (clave, valores) values
+  ('Prioridad', '["Alta","Media","Baja"]'),
+  ('ReportadoPor', '["Amigo","Anónimo","Autoridad","Chat Violencias","Ciudadano","DAC","Escuela","Familiar","Institución","Vecino","Otro"]'),
+  ('TipoUsuario', '["Niño/a","Adolescente","Adulto","Adulto mayor","Usuario","Familiar","Tercero","Institución","Anónimo","Otro","Situación de calle"]'),
+  ('Sexo', '["Hombre","Mujer","No se sabe"]'),
+  ('Parentesco', '["Madre","Padre","Esposo/a","Cónyuge","Pareja","Hijo/a","Hermano/a","Abuelo/a","Tío/a","Primo/a","Padrastro","Tutor","Amigo/a","Vecino/a","Otro"]'),
+  ('EstadoCivil', '["Soltero/a","Casado/a","Unión libre","Divorciado/a","Separado/a","Viudo/a","No se sabe"]'),
+  ('Oficinas', '["101","232","259","64"]'),
+  ('CentrosRehabilitacion', '[]'),
+  ('Sustancia', '["Alcohol","Tabaco","Marihuana","Cristal (metanfetamina)","Cocaína","Crack","Inhalables (activo, thinner)","Heroína","Fentanilo","Medicamentos sin receta","Otra"]')
+on conflict (clave) do nothing;
+
+-- Verificación: debe mostrar los permisos de Reportes por rol
+select rol, count(*) as permisos
+from acceso_rol_permisos
+where modulo = 'reportes'
+group by rol
+order by rol;

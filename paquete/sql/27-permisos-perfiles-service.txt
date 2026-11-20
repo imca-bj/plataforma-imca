@@ -1,0 +1,24 @@
+-- 27 · Permisos para que personal-clave cree perfiles
+-- Paso 1: revisa si Arturo o Carla quedaron con una cuenta a medias.
+-- Sirve para saber si hay que limpiar algo antes de volver a intentar.
+
+select id, email, created_at
+from auth.users
+where email in ('arturo.soto@imcabj.gob.mx', 'carla.guzman@imcabj.gob.mx');
+
+-- Paso 2: da al servicio de la función permiso para escribir en perfiles.
+-- Sirve para que la función pueda crear el perfil después de crear la cuenta.
+
+grant usage on schema public to service_role;
+grant select, insert, update, delete on public.perfiles to service_role;
+grant select, insert, update, delete on public.acceso_persona to service_role;
+grant select on public.personal_catalogo to service_role;
+grant select, update on public.personal_catalogo to service_role;
+
+-- Paso 3 (solo si el paso 1 mostró filas sin perfil):
+-- borra las cuentas a medias para que la función las cree completas.
+-- Sirve para evitar el error "ya existe" al volver a intentar.
+
+delete from auth.users
+where email in ('arturo.soto@imcabj.gob.mx', 'carla.guzman@imcabj.gob.mx')
+  and id not in (select id from public.perfiles);

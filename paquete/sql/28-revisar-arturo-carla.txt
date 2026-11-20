@@ -1,0 +1,8 @@
+-- 28 · Revisar si Arturo y Carla ya tienen cuenta
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para saber si la cuenta se creó y si quedó enlazada con su ficha de personal.
+
+select u.email, u.created_at, pc.nombre, pc.perfil_id
+from auth.users u
+left join public.personal_catalogo pc on pc.correo = u.email
+where u.email in ('arturo.soto@imcabj.gob.mx', 'carla.guzman@imcabj.gob.mx');

@@ -1,0 +1,75 @@
+-- 34 · Agenda operativo toma sus accesos de Personal
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para que cuando asignes Agenda operativo en Personal, la persona también quede
+-- dada de alta en el personal de pláticas y pueda entrar. Así funciona igual para todos.
+-- Los roles que Agenda operativo no conoce (terapeuta, consulta) entran como "operativo".
+
+-- 1. Traducir el rol de Personal al rol que usa Agenda operativo
+create or replace function acceso_rol_operativo(p_rol text)
+returns text language sql immutable as $$
+  select case when p_rol in ('administrador', 'coordinador', 'supervision', 'operativo', 'tecnica')
+              then p_rol else 'operativo' end
+$$;
+
+-- 2. Alta de quienes ya tienen Agenda operativo asignada en Personal
+insert into pl_personal (perfil_id, rol, convocable, ve_dashboard, puede_anular, puede_descargar, activo)
+select a.perfil_id,
+       acceso_rol_operativo(a.rol),
+       false,
+       false,
+       acceso_rol_operativo(a.rol) in ('administrador', 'coordinador', 'supervision'),
+       acceso_rol_operativo(a.rol) in ('administrador', 'coordinador', 'supervision'),
+       a.activo
+from acceso_persona a
+where a.modulo = 'operativo'
+on conflict (perfil_id) do update set activo = excluded.activo;
+
+-- 3. Asignar roles: ahora también sincroniza Agenda operativo
+create or replace function acceso_asignar_rol(
+  p_perfil uuid, p_modulo text, p_rol text, p_activo boolean default true
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not es_admin_plataforma() then
+    raise exception 'Solo el administrador puede cambiar roles.';
+  end if;
+  if not exists (select 1 from acceso_roles r where r.rol = p_rol and r.activo) then
+    raise exception 'Ese rol no existe o está desactivado.';
+  end if;
+  -- Nadie puede quitarse a sí mismo el rol de administrador en todos los módulos
+  if p_perfil = auth.uid() and (not p_activo or p_rol <> 'administrador')
+     and not exists (
+       select 1 from acceso_persona x
+       where x.perfil_id = p_perfil and x.modulo <> p_modulo
+         and x.rol = 'administrador' and x.activo
+     ) then
+    raise exception 'No puedes quitarte a ti mismo el rol de administrador en todos los módulos.';
+  end if;
+  insert into acceso_persona (perfil_id, modulo, rol, activo, actualizado, actualizado_por)
+  values (p_perfil, p_modulo, p_rol, p_activo, now(), auth.uid())
+  on conflict (perfil_id, modulo) do update
+    set rol = excluded.rol,
+        activo = excluded.activo,
+        actualizado = now(),
+        actualizado_por = auth.uid();
+
+  if p_modulo = 'operativo' then
+    insert into pl_personal (perfil_id, rol, convocable, ve_dashboard, puede_anular, puede_descargar, activo)
+    values (p_perfil, acceso_rol_operativo(p_rol), false, false,
+            acceso_rol_operativo(p_rol) in ('administrador', 'coordinador', 'supervision'),
+            acceso_rol_operativo(p_rol) in ('administrador', 'coordinador', 'supervision'),
+            p_activo)
+    on conflict (perfil_id) do update
+      set rol = excluded.rol, activo = excluded.activo;
+  end if;
+end;
+$$;
+
+grant execute on function acceso_asignar_rol(uuid, text, text, boolean) to authenticated;
+
+-- Revisión: cuántas personas tiene Agenda operativo activas
+select count(*) as personas_operativo_activas from pl_personal where activo;

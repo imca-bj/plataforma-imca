@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control de vacaciones IMCA</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+:root { --azul:#7a1f3d; --gris:#f3f5f8; --borde:#d9dee5; --rojo:#b3261e; --verde:#2e7d32; }
+* { box-sizing:border-box; }
+body { font-family:system-ui,Arial,sans-serif; margin:0; background:var(--gris); color:#222; font-size:15px; }
+header { background:var(--azul); color:#fff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+header strong { font-size:16px; }
+nav { background:#fff; border-bottom:1px solid var(--borde); display:flex; flex-wrap:wrap; overflow-x:auto; }
+nav button { border:0; background:none; padding:12px 14px; cursor:pointer; font-size:14px; border-bottom:3px solid transparent; }
+nav button.act { border-bottom-color:var(--azul); color:var(--azul); font-weight:bold; }
+main { padding:16px; max-width:1100px; margin:auto; }
+.card { background:#fff; border:1px solid var(--borde); border-radius:6px; padding:16px; margin-bottom:16px; }
+.card h3 { margin-top:0; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
+label { display:block; font-size:13px; color:#444; margin-bottom:8px; }
+input, select, textarea { width:100%; padding:8px; border:1px solid #bbb; border-radius:4px; font-size:15px; margin-top:4px; }
+input[type=checkbox] { width:auto; }
+button.primario { background:var(--azul); color:#fff; border:0; border-radius:4px; padding:10px 16px; font-size:15px; cursor:pointer; margin-right:6px; margin-top:6px; }
+button.sec { background:#fff; border:1px solid var(--azul); color:var(--azul); border-radius:4px; padding:6px 10px; cursor:pointer; margin-right:6px; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th, td { text-align:left; padding:8px; border-bottom:1px solid var(--borde); vertical-align:top; }
+th { background:#eef2f7; }
+.tabla-wrap { overflow-x:auto; }
+.msg { padding:10px; border-radius:4px; margin-bottom:12px; display:none; }
+.msg.error { background:#fdecea; color:var(--rojo); display:block; }
+.msg.ok { background:#e8f5e9; color:var(--verde); display:block; }
+.ayuda { font-size:13px; color:#555; }
+.oculto { display:none !important; }
+.anulada { color:#999; text-decoration:line-through; }
+.neg { color:var(--rojo); font-weight:bold; }
+.quien { flex:none; text-align:right; background:rgba(255,255,255,.14); border-radius:12px; padding:6px 10px; font-size:13px; line-height:1.35; max-width:55%; }
+.quien span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.quien a { color:#fff; text-decoration:underline; }
+@media print { header, nav, .no-imprimir { display:none !important; } body { background:#fff; } main { padding:0; } .card { border:0; } }
+</style>
+</head>
+<body>
+
+<div id="cargando" class="card" style="max-width:360px;margin:60px auto;text-align:center">Cargando…</div>
+
+<div id="sinPermiso" class="card oculto" style="max-width:420px;margin:60px auto">
+  <p id="sinPermisoTexto"></p>
+  <a href="index.html">Volver a la pantalla principal</a>
+</div>
+
+<div id="app" class="oculto">
+  <header>
+    <div><strong>Control de vacaciones, faltas y permisos</strong></div>
+    <div class="quien"><span id="uNombre"></span><a href="index.html">Plataforma</a></div>
+  </header>
+  <nav id="nav"></nav>
+  <main>
+    <div id="msg" class="msg"></div>
+
+    <section id="s-saldos" class="vista oculto">
+      <div class="card">
+        <h3>Saldos de vacaciones</h3>
+        <div class="grid">
+          <label>Buscar por nombre<input id="sBuscar" placeholder="Escribe un nombre"></label>
+          <label>Área<select id="sArea"><option value="">Todas</option></select></label>
+        </div>
+        <p class="ayuda">Toca el título de una columna para ordenar. Otro toque lo invierte.</p>
+        <div class="tabla-wrap"><table>
+          <thead><tr>
+            <th class="ord" data-col="nombre">Nombre</th><th class="ord" data-col="area">Área</th>
+            <th class="ord" data-col="saldoInicial">Saldo inicial</th><th class="ord" data-col="tomados">Tomados</th><th class="ord" data-col="saldo">Saldo</th>
+          </tr></thead>
+          <tbody id="tSaldos"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="s-ausencias" class="vista oculto">
+      <div class="card">
+        <h3>Ausencias</h3>
+        <div class="grid">
+          <label>Persona<select id="fPersona"></select></label>
+          <label>Desde<input type="date" id="fDesde"></label>
+          <label>Hasta<input type="date" id="fHasta"></label>
+          <label>Tipo<select id="fTipo"></select></label>
+        </div>
+        <p><button class="sec" onclick="cargarAusencias().catch(err=>aviso('msg',err.message,'error'))">Buscar</button></p>
+        <div class="tabla-wrap"><table>
+          <thead><tr><th>Fecha</th><th>Persona</th><th>Tipo</th><th>Días / horas</th><th>Motivo</th><th>Estatus</th><th></th></tr></thead>
+          <tbody id="tAusencias"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="s-registrar" class="vista oculto">
+      <div class="card">
+        <h3>Registrar ausencia o permiso</h3>
+        <form id="formAus">
+          <div class="grid">
+            <label>Persona<select id="aPersona" required></select></label>
+            <label>Tipo<select id="aTipo" required></select></label>
+            <label>Fecha de inicio<input type="date" id="aInicio" required></label>
+            <label id="lFin">Fecha de fin<input type="date" id="aFin"></label>
+            <label id="lSalida" class="oculto">Hora de salida<input type="time" id="aSalida"></label>
+            <label id="lRegreso" class="oculto">Hora de regreso<input type="time" id="aRegreso"></label>
+            <label id="lMotivo">Motivo<input id="aMotivo" maxlength="200"></label>
+          </div>
+          <label>Observaciones<textarea id="aObs" rows="2"></textarea></label>
+          <label>Formato, constancia o foto (se activa en la siguiente fase)<input type="file" id="aArchivo" disabled></label>
+          <label id="lForzar"><input type="checkbox" id="aForzar"> Forzar aunque no alcance el saldo (solo con ese permiso)</label>
+          <button class="primario">Guardar</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="s-personal" class="vista oculto">
+      <div class="card">
+        <h3>Personal</h3>
+        <div class="tabla-wrap"><table>
+          <thead><tr><th>Nombre</th><th>Área</th><th>Fecha de ingreso</th><th>Saldo inicial</th><th>Activo</th><th></th></tr></thead>
+          <tbody id="tPersonal"></tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h3 id="tituloPersonal">Nueva persona</h3>
+        <form id="formPersonal">
+          <input type="hidden" id="pId">
+          <div class="grid">
+            <label>Nombre completo<input id="pNombre" required></label>
+            <label>Área
+              <select id="pArea">
+                <option value="">Sin área</option>
+                <option>Dirección General</option>
+                <option>Administrativa</option>
+                <option>Planeación estratégica</option>
+                <option>Terapéutico de Atención</option>
+                <option>Terapéutico Operativo</option>
+              </select>
+            </label>
+            <label>Fecha de ingreso<input type="date" id="pIngreso"></label>
+            <label>Saldo inicial de días<input type="number" step="0.5" id="pSaldo" value="10"></label>
+            <label>Activo<select id="pActivo"><option value="SI">Sí</option><option value="NO">No (baja)</option></select></label>
+          </div>
+          <button class="primario">Guardar</button>
+          <button type="button" class="sec" onclick="limpiarPersonal()">Nueva persona</button>
+          <button type="button" class="sec oculto" id="btnEliminar" onclick="eliminarPersonal()">Eliminar esta persona</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="s-feriados" class="vista oculto">
+      <div class="card">
+        <h3>Festivos y días no hábiles</h3>
+        <p class="ayuda">Estos días no cuentan como días hábiles al calcular vacaciones, incapacidades y compensatorios.</p>
+        <div class="grid">
+          <label>Año<input type="number" id="fAnio" value="2027"></label>
+        </div>
+        <button class="primario" onclick="cargarLey().catch(err=>aviso('msg',err.message,'error'))">Cargar festivos de ley de ese año</button>
+      </div>
+      <div class="card">
+        <h3>Agregar festivo del Ayuntamiento o día libre</h3>
+        <form id="formFeriado">
+          <div class="grid">
+            <label>Fecha<input type="date" id="hFecha" required></label>
+            <label>Descripción<input id="hDesc" maxlength="120" required></label>
+          </div>
+          <button class="primario">Agregar</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3>Lista de días no hábiles</h3>
+        <div class="tabla-wrap"><table>
+          <thead><tr><th>Fecha</th><th>Descripción</th></tr></thead>
+          <tbody id="tFeriados"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="s-reporte" class="vista oculto">
+      <div class="card no-imprimir">
+        <h3>Reporte por persona</h3>
+        <div class="grid">
+          <label>Persona<select id="rPersona"></select></label>
+          <label>Año<input type="number" id="rAnio" value="2027"></label>
+        </div>
+        <button class="primario" onclick="generarReporte().catch(err=>aviso('msg',err.message,'error'))">Generar</button>
+        <button class="sec" onclick="window.print()">Imprimir o guardar como PDF</button>
+      </div>
+      <div id="rResultado"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const TIPOS = ['Vacaciones', 'Incapacidad', 'Falta', 'Permiso con goce', 'Permiso parcial', 'Permiso sin goce', 'Compensatorio'];
+let personal = [];
+let PERM = {};
+let SALDOS = [];
+let ORDEN = { col: null, asc: true };
+
+function $(id) { return document.getElementById(id); }
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function aviso(id, texto, tipo) {
+  const el = $(id);
+  el.textContent = texto || '';
+  el.className = 'msg' + (tipo && texto ? ' ' + tipo : '');
+  if (texto) window.scrollTo(0, 0);
+}
+// Hoy en hora de Cancún, formato yyyy-mm-dd
+function hoy() {
+  const p = {};
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Cancun', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(new Date()).forEach(x => { p[x.type] = x.value; });
+  return p.year + '-' + p.month + '-' + p.day;
+}
+function fmtFecha(f) {
+  if (!f) return '';
+  const [y, m, d] = String(f).slice(0, 10).split('-');
+  return d + '/' + m + '/' + y;
+}
+function hora(h) { return h ? String(h).slice(0, 5) : ''; }
+
+async function rpc(nombre, params) {
+  const { data, error } = await sb.rpc(nombre, params || {});
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function consulta(q) {
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+/* ---------- Arranque: usa la sesión de la plataforma principal ---------- */
+
+window.onload = async () => {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return location.replace('index.html');
+    if ((session.user.user_metadata || {}).debe_cambiar_clave) return location.replace('index.html');
+    for (const k of ['ver', 'crear', 'anular', 'forzar_saldo', 'configurar']) PERM[k] = await rpc('vac_tiene', { p_clave: k });
+    if (!PERM.ver) {
+      $('cargando').classList.add('oculto');
+      $('sinPermisoTexto').textContent = 'No tienes acceso al módulo de Vacaciones. Pide permiso desde la pantalla Personal.';
+      $('sinPermiso').classList.remove('oculto');
+      return;
+    }
+    const perfil = await consulta(sb.from('perfiles').select('nombre').eq('id', session.user.id).limit(1));
+    $('uNombre').textContent = (perfil[0] && perfil[0].nombre) || session.user.email;
+
+    $('aTipo').innerHTML = TIPOS.map(t => `<option>${esc(t)}</option>`).join('');
+    $('fTipo').innerHTML = '<option value="">Todos</option>' + TIPOS.map(t => `<option>${esc(t)}</option>`).join('');
+    const menu = [['saldos', 'Saldos'], ['ausencias', 'Ausencias']];
+    if (PERM.crear) menu.push(['registrar', 'Registrar']);
+    if (PERM.configurar) menu.push(['personal', 'Personal'], ['feriados', 'Feriados']);
+    menu.push(['reporte', 'Reporte']);
+    $('nav').innerHTML = menu.map(([k, t]) => `<button data-v="${k}" onclick="ir('${k}')">${t}</button>`).join('');
+    if (!PERM.forzar_saldo) $('lForzar').classList.add('oculto');
+    $('aTipo').onchange();
+
+    $('cargando').classList.add('oculto');
+    $('app').classList.remove('oculto');
+    await cargarPersonal();
+    ir('saldos');
+  } catch (e) {
+    $('cargando').textContent = 'No se pudo abrir: ' + e.message;
+  }
+};
+
+function ir(v) {
+  document.querySelectorAll('.vista').forEach(s => s.classList.add('oculto'));
+  $('s-' + v).classList.remove('oculto');
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('act', b.dataset.v === v));
+  const cargas = { saldos: cargarSaldos, ausencias: cargarAusencias, personal: cargarPersonal, feriados: cargarFeriados };
+  if (cargas[v]) cargas[v]().catch(err => aviso('msg', err.message, 'error'));
+}
+
+/* ---------- Personal ---------- */
+
+async function cargarPersonal() {
+  personal = await consulta(sb.from('vac_personal').select('*').order('nombre'));
+  $('tPersonal').innerHTML = personal.map(p => `
+    <tr class="${p.activo ? '' : 'anulada'}">
+      <td>${esc(p.nombre)}</td><td>${esc(p.area)}</td><td>${fmtFecha(p.fecha_ingreso)}</td>
+      <td>${p.saldo_inicial}</td><td>${p.activo ? 'Sí' : 'No'}</td>
+      <td><button class="sec" onclick="editarPersonal('${p.id}')">Editar</button></td>
+    </tr>`).join('') || '<tr><td colspan="6">Sin personal</td></tr>';
+  llenarSelects();
+}
+
+function llenarSelects() {
+  const opcActivos = personal.filter(p => p.activo)
+    .map(p => `<option value="${p.id}">${esc(p.nombre)}${p.area ? ' · ' + esc(p.area) : ''}</option>`).join('');
+  const opcTodos = personal.map(p => `<option value="${p.id}">${esc(p.nombre)}${p.area ? ' · ' + esc(p.area) : ''}</option>`).join('');
+  $('fPersona').innerHTML = '<option value="">Todas</option>' + opcTodos;
+  $('aPersona').innerHTML = '<option value="">Elige…</option>' + opcActivos;
+  $('rPersona').innerHTML = '<option value="">Elige…</option>' + opcTodos;
+}
+
+function editarPersonal(id) {
+  const p = personal.find(x => x.id === id);
+  if (!p) return;
+  $('tituloPersonal').textContent = 'Editar: ' + p.nombre;
+  $('pId').value = p.id;
+  $('pNombre').value = p.nombre;
+  $('pArea').value = p.area || '';
+  $('pIngreso').value = p.fecha_ingreso || '';
+  $('pSaldo').value = p.saldo_inicial;
+  $('pActivo').value = p.activo ? 'SI' : 'NO';
+  $('btnEliminar').classList.remove('oculto');
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+function limpiarPersonal() {
+  $('formPersonal').reset();
+  $('pId').value = '';
+  $('pSaldo').value = 10;
+  $('tituloPersonal').textContent = 'Nueva persona';
+  $('btnEliminar').classList.add('oculto');
+}
+
+$('formPersonal').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await rpc('vac_guardar_persona', {
+      p_id: $('pId').value || null,
+      p_nombre: $('pNombre').value,
+      p_area: $('pArea').value,
+      p_fecha_ingreso: $('pIngreso').value || null,
+      p_saldo_inicial: Number($('pSaldo').value || 10),
+      p_activo: $('pActivo').value === 'SI'
+    });
+    aviso('msg', 'Persona guardada', 'ok');
+    limpiarPersonal();
+    await cargarPersonal();
+  } catch (err) { aviso('msg', err.message, 'error'); }
+};
+
+async function eliminarPersonal() {
+  const id = $('pId').value;
+  if (!id) return;
+  if (!confirm('¿Eliminar a esta persona de la lista? Solo se puede si no tiene ausencias.')) return;
+  try {
+    await rpc('vac_eliminar_persona', { p_id: id });
+    aviso('msg', 'Persona eliminada', 'ok');
+    limpiarPersonal();
+    await cargarPersonal();
+  } catch (err) { aviso('msg', err.message, 'error'); }
+}
+
+/* ---------- Saldos ---------- */
+
+async function cargarSaldos() {
+  const datos = await rpc('vac_saldos', { p_fecha: hoy() });
+  SALDOS = datos.map(f => ({
+    nombre: f.nombre, area: f.area || '', saldoInicial: Number(f.saldo_inicial),
+    tomados: Number(f.tomados), saldo: Number(f.saldo)
+  }));
+  const areas = [...new Set(SALDOS.map(f => f.area).filter(Boolean))].sort();
+  const seleccion = $('sArea').value;
+  $('sArea').innerHTML = '<option value="">Todas</option>' + areas.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+  $('sArea').value = seleccion;
+  if (!window.SALDOS_LISTOS) {
+    window.SALDOS_LISTOS = true;
+    $('sBuscar').oninput = pintarSaldos;
+    $('sArea').onchange = pintarSaldos;
+    document.querySelectorAll('th.ord').forEach(th => {
+      th.style.cursor = 'pointer';
+      th.style.userSelect = 'none';
+      th.dataset.base = th.textContent.trim();
+      th.onclick = () => {
+        if (ORDEN.col === th.dataset.col) ORDEN.asc = !ORDEN.asc;
+        else { ORDEN.col = th.dataset.col; ORDEN.asc = true; }
+        pintarSaldos();
+      };
+    });
+  }
+  pintarSaldos();
+}
+
+function pintarSaldos() {
+  const q = $('sBuscar').value.trim().toLowerCase();
+  const area = $('sArea').value;
+  const sgn = ORDEN.asc ? 1 : -1;
+  const c = ORDEN.col;
+  const filas = SALDOS
+    .filter(f => (!q || String(f.nombre).toLowerCase().includes(q)) && (!area || f.area === area))
+    .sort((a, b) => {
+      if (!c) return 0;
+      const x = a[c], y = b[c];
+      if (typeof x === 'number' && typeof y === 'number') return (x - y) * sgn;
+      return String(x || '').localeCompare(String(y || ''), 'es') * sgn;
+    });
+  document.querySelectorAll('th.ord').forEach(th => {
+    const activo = th.dataset.col === c;
+    th.textContent = th.dataset.base + (activo ? (ORDEN.asc ? ' ▲' : ' ▼') : '');
+  });
+  $('tSaldos').innerHTML = filas.map(f => `
+    <tr>
+      <td>${esc(f.nombre)}</td><td>${esc(f.area)}</td><td>${f.saldoInicial}</td>
+      <td>${f.tomados}</td>
+      <td class="${f.saldo < 0 ? 'neg' : ''}"><strong>${f.saldo}</strong></td>
+    </tr>`).join('') || `<tr><td colspan="5">${SALDOS.length ? 'Ninguna persona con ese filtro' : 'Sin personal registrado'}</td></tr>`;
+}
+
+/* ---------- Registrar ---------- */
+
+$('aTipo').onchange = () => {
+  const parcial = $('aTipo').value === 'Permiso parcial';
+  $('lSalida').classList.toggle('oculto', !parcial);
+  $('lRegreso').classList.toggle('oculto', !parcial);
+  $('lFin').classList.toggle('oculto', parcial);
+  $('lMotivo').classList.toggle('oculto', $('aTipo').value === 'Vacaciones');
+};
+
+$('formAus').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const tipo = $('aTipo').value;
+    const parcial = tipo === 'Permiso parcial';
+    const inicio = $('aInicio').value;
+    await rpc('vac_registrar', {
+      p_persona: $('aPersona').value,
+      p_tipo: tipo,
+      p_inicio: inicio,
+      p_fin: parcial ? inicio : ($('aFin').value || inicio),
+      p_hora_salida: parcial ? ($('aSalida').value || null) : null,
+      p_hora_regreso: parcial ? ($('aRegreso').value || null) : null,
+      p_motivo: tipo === 'Vacaciones' ? '' : $('aMotivo').value,
+      p_observaciones: $('aObs').value,
+      p_forzar: $('aForzar').checked
+    });
+    e.target.reset();
+    $('aTipo').onchange();
+    ir('saldos');
+    aviso('msg', 'Registro guardado.', 'ok');
+  } catch (err) { aviso('msg', err.message, 'error'); }
+};
+
+/* ---------- Ausencias ---------- */
+
+async function cargarAusencias() {
+  let q = sb.from('vac_ausencias').select('*, vac_personal(nombre)')
+    .order('fecha_inicio', { ascending: false }).limit(500);
+  if ($('fPersona').value) q = q.eq('persona_id', $('fPersona').value);
+  if ($('fDesde').value) q = q.gte('fecha_inicio', $('fDesde').value);
+  if ($('fHasta').value) q = q.lte('fecha_inicio', $('fHasta').value);
+  if ($('fTipo').value) q = q.eq('tipo', $('fTipo').value);
+  const filas = await consulta(q);
+  $('tAusencias').innerHTML = filas.map(a => `
+    <tr class="${a.estatus === 'Anulada' ? 'anulada' : ''}">
+      <td>${fmtFecha(a.fecha_inicio)}${a.fecha_fin !== a.fecha_inicio ? ' al ' + fmtFecha(a.fecha_fin) : ''}</td>
+      <td>${esc(a.vac_personal ? a.vac_personal.nombre : '')}</td>
+      <td>${esc(a.tipo)}</td>
+      <td>${a.tipo === 'Permiso parcial' ? hora(a.hora_salida) + ' – ' + hora(a.hora_regreso) + ' (' + a.horas + ' h)' : a.dias + ' día(s)'}</td>
+      <td>${esc(a.motivo)}</td>
+      <td>${esc(a.estatus)}${a.motivo_anulacion ? '<br><small>' + esc(a.motivo_anulacion) + '</small>' : ''}</td>
+      <td>${PERM.anular && a.estatus === 'Registrada' ? `<button class="sec" onclick="anular('${a.id}')">Anular</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="7">Sin registros</td></tr>';
+}
+
+async function anular(id) {
+  const motivo = prompt('Motivo de la anulación:');
+  if (!motivo) return;
+  try {
+    await rpc('vac_anular', { p_id: id, p_motivo: motivo });
+    aviso('msg', 'Registro anulado', 'ok');
+    await cargarAusencias();
+  } catch (err) { aviso('msg', err.message, 'error'); }
+}
+
+/* ---------- Festivos ---------- */
+
+async function cargarFeriados() {
+  const anio = Number($('fAnio').value);
+  const f = await consulta(sb.from('vac_feriados').select('*')
+    .gte('fecha', anio + '-01-01').lte('fecha', anio + '-12-31').order('fecha'));
+  $('tFeriados').innerHTML = f.map(x => `<tr><td>${fmtFecha(x.fecha)}</td><td>${esc(x.descripcion)}</td></tr>`).join('')
+    || '<tr><td colspan="2">Todavía no hay días cargados</td></tr>';
+}
+
+async function cargarLey() {
+  await rpc('vac_cargar_feriados_ley', { p_anio: Number($('fAnio').value) });
+  aviso('msg', 'Festivos de ley cargados', 'ok');
+  await cargarFeriados();
+}
+
+$('fAnio').onchange = () => cargarFeriados().catch(err => aviso('msg', err.message, 'error'));
+
+$('formFeriado').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await rpc('vac_agregar_feriado', { p_fecha: $('hFecha').value, p_descripcion: $('hDesc').value });
+    aviso('msg', 'Día agregado', 'ok');
+    e.target.reset();
+    await cargarFeriados();
+  } catch (err) { aviso('msg', err.message, 'error'); }
+};
+
+/* ---------- Reporte ---------- */
+
+async function generarReporte() {
+  const id = $('rPersona').value;
+  if (!id) throw new Error('Elige una persona');
+  const anio = Number($('rAnio').value);
+  const p = personal.find(x => x.id === id);
+  const filas = await consulta(sb.from('vac_ausencias').select('*').eq('persona_id', id)
+    .gte('fecha_inicio', anio + '-01-01').lte('fecha_inicio', anio + '-12-31').order('fecha_inicio'));
+
+  // Desde 2027 cada periodo empieza con 10 días; en 2026 solo cuenta el segundo periodo
+  const periodos = anio >= 2027
+    ? [['Enero a junio', anio + '-01-01', anio + '-06-30'], ['Julio a diciembre', anio + '-07-01', anio + '-12-31']]
+    : [['Julio a diciembre', anio + '-07-01', anio + '-12-31']];
+  const vacs = filas.filter(a => a.tipo === 'Vacaciones' && a.estatus === 'Registrada');
+  const saldos = periodos.map(([nombre, desde, hasta]) => {
+    const tomados = vacs.filter(a => a.fecha_inicio >= desde && a.fecha_inicio <= hasta)
+      .reduce((s, a) => s + Number(a.dias), 0);
+    return { nombre, inicial: p.saldo_inicial, tomados, saldo: p.saldo_inicial - tomados };
+  });
+
+  const activas = filas.filter(a => a.estatus === 'Registrada');
+  const suma = t => activas.filter(a => a.tipo === t).reduce((s, a) => s + Number(a.dias), 0);
+  const parciales = activas.filter(a => a.tipo === 'Permiso parcial');
+  const horasParciales = parciales.reduce((s, a) => s + Number(a.horas), 0);
+
+  $('rResultado').innerHTML = `
+  <div class="card">
+    <h2 style="margin-top:0">Reporte de ausencias ${anio}</h2>
+    <p><strong>${esc(p.nombre)}</strong><br>${esc(p.area)}<br>Fecha de ingreso: ${fmtFecha(p.fecha_ingreso)}</p>
+    <h3>Saldo de vacaciones</h3>
+    <div class="tabla-wrap"><table>
+      <thead><tr><th>Periodo</th><th>Saldo inicial</th><th>Tomados</th><th>Saldo disponible</th></tr></thead>
+      <tbody>${saldos.map(s => `<tr><td>${s.nombre}</td><td>${s.inicial}</td><td>${s.tomados}</td><td class="${s.saldo < 0 ? 'neg' : ''}"><strong>${s.saldo}</strong></td></tr>`).join('')}</tbody>
+    </table></div>
+    <h3>Resumen del año</h3>
+    <table><tbody>
+      <tr><td>Vacaciones</td><td>${suma('Vacaciones')} día(s)</td></tr>
+      <tr><td>Incapacidad</td><td>${suma('Incapacidad')} día(s)</td></tr>
+      <tr><td>Faltas</td><td>${suma('Falta')} día(s)</td></tr>
+      <tr><td>Permisos con goce</td><td>${suma('Permiso con goce')} día(s)</td></tr>
+      <tr><td>Permisos sin goce</td><td>${suma('Permiso sin goce')} día(s)</td></tr>
+      <tr><td>Compensatorios</td><td>${suma('Compensatorio')} día(s)</td></tr>
+      <tr><td>Permisos parciales</td><td>${parciales.length} permiso(s), ${horasParciales} hora(s)</td></tr>
+    </tbody></table>
+    <h3>Detalle</h3>
+    <div class="tabla-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Tipo</th><th>Días / horas</th><th>Motivo</th><th>Estatus</th></tr></thead>
+      <tbody>${filas.map(a => `
+        <tr class="${a.estatus === 'Anulada' ? 'anulada' : ''}">
+          <td>${fmtFecha(a.fecha_inicio)}${a.fecha_fin !== a.fecha_inicio ? ' al ' + fmtFecha(a.fecha_fin) : ''}</td>
+          <td>${esc(a.tipo)}</td>
+          <td>${a.tipo === 'Permiso parcial' ? hora(a.hora_salida) + ' – ' + hora(a.hora_regreso) + ' (' + a.horas + ' h)' : a.dias + ' día(s)'}</td>
+          <td>${esc(a.motivo)}</td>
+          <td>${esc(a.estatus)}</td>
+        </tr>`).join('') || '<tr><td colspan="5">Sin registros este año</td></tr>'}
+      </tbody>
+    </table></div>
+    <p style="font-size:12px;color:#666;margin-top:24px">Generado el ${new Date().toLocaleDateString('es-MX')}.</p>
+    <p style="margin-top:40px">______________________________<br>Recursos Humanos</p>
+  </div>`;
+}
+</script>
+</body>
+</html>

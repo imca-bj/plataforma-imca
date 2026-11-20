@@ -1,0 +1,9 @@
+-- 30 · Revisar los permisos guardados de Arturo
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para ver qué módulos y roles quedaron guardados para él.
+
+select pc.nombre, p.modulo, p.rol, p.activo, p.actualizado
+from acceso_persona p
+join personal_catalogo pc on pc.perfil_id = p.perfil_id
+where pc.nombre like 'Arturo%'
+order by p.modulo;

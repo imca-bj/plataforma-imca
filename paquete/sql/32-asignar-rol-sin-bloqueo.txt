@@ -1,0 +1,41 @@
+-- 32 · Permitir que el administrador asigne su propio rol en cualquier módulo
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para que puedas ponerte Administrador en Vacaciones (y en cualquier módulo) sin el error
+-- "No puedes quitarte a ti mismo el permiso de administrar personal".
+-- Sigue protegido: no puedes quitarte el rol de administrador en todos los módulos a la vez.
+
+create or replace function acceso_asignar_rol(
+  p_perfil uuid, p_modulo text, p_rol text, p_activo boolean default true
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not es_admin_plataforma() then
+    raise exception 'Solo el administrador puede cambiar roles.';
+  end if;
+  if not exists (select 1 from acceso_roles r where r.rol = p_rol and r.activo) then
+    raise exception 'Ese rol no existe o está desactivado.';
+  end if;
+  -- Nadie puede quitarse a sí mismo el rol de administrador en todos los módulos
+  if p_perfil = auth.uid() and (not p_activo or p_rol <> 'administrador')
+     and not exists (
+       select 1 from acceso_persona x
+       where x.perfil_id = p_perfil and x.modulo <> p_modulo
+         and x.rol = 'administrador' and x.activo
+     ) then
+    raise exception 'No puedes quitarte a ti mismo el rol de administrador en todos los módulos.';
+  end if;
+  insert into acceso_persona (perfil_id, modulo, rol, activo, actualizado, actualizado_por)
+  values (p_perfil, p_modulo, p_rol, p_activo, now(), auth.uid())
+  on conflict (perfil_id, modulo) do update
+    set rol = excluded.rol,
+        activo = excluded.activo,
+        actualizado = now(),
+        actualizado_por = auth.uid();
+end;
+$$;
+
+grant execute on function acceso_asignar_rol(uuid, text, text, boolean) to authenticated;

@@ -1,0 +1,18 @@
+-- 31 · Dar al rol Coordinador los permisos de Vacaciones
+-- Copia todo, pégalo en SQL Editor y pulsa Run.
+-- Sirve para que quien tenga el rol Coordinador en Vacaciones pueda ver, registrar y anular.
+-- No incluye "forzar saldo" ni "configurar personal y festivos", que quedan solo para administrador.
+
+insert into acceso_rol_permisos (rol, modulo, clave)
+select 'coordinador', 'vacaciones', c
+from unnest(array['ver', 'crear', 'anular']) as c
+where not exists (
+  select 1 from acceso_rol_permisos x
+  where x.rol = 'coordinador' and x.modulo = 'vacaciones' and x.clave = c
+);
+
+-- Revisión: deben salir 3 filas (ver, crear, anular)
+select rol, modulo, clave
+from acceso_rol_permisos
+where rol = 'coordinador' and modulo = 'vacaciones'
+order by clave;

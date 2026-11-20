@@ -1,0 +1,29 @@
+-- 15 · Ajustes de Agenda operativo
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Para qué sirve:
+--   1. Carolina y Luis pueden aparecer como convocados.
+--   2. Agrega "Padres y madres" al catálogo de público.
+--   3. "¿Cómo se darán las pláticas?" ahora permite marcar varias opciones.
+-- Se puede correr más de una vez sin causar error.
+
+-- 1. Carolina y Luis son convocables
+update pl_personal set convocable = true
+where perfil_id in (
+  select id from auth.users
+  where lower(email) in ('carolina.rebolledo@imcabj.gob.mx', 'luis.mis@imcabj.gob.mx')
+);
+
+-- 2. Público: agrega Padres y madres
+insert into pl_catalogo (tipo, valor, orden, activo)
+values ('publico', 'Padres y madres', 3, true)
+on conflict (tipo, valor) do update set activo = true;
+
+-- 3. Cómo se darán: pasa de una sola opción a varias
+alter table pl_actividades
+  alter column como_se_da type text[]
+  using (case when como_se_da is null then null else array[como_se_da] end);
+
+-- Verificación: debe mostrar Carolina y Luis con convocable = true
+select p.nombre, pp.convocable
+from pl_personal pp join perfiles p on p.id = pp.perfil_id
+where p.nombre ilike '%carolina%' or p.nombre ilike '%luis%';

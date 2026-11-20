@@ -1,0 +1,176 @@
+-- 21 · Reportes IMCA, AJUSTE DE CAMPOS (mismos nombres que la app original)
+-- Pégalo en Supabase > SQL Editor > New query > Run.
+-- Corre después del 20.
+-- Para qué sirve: las funciones de Reportes ahora guardan los datos con los mismos nombres de campo
+-- que usa la pantalla original (Nombre, Telefono, Descripcion, etc.).
+-- Mantiene las mismas reglas de permisos: quien no puede, no puede guardar ni leer.
+-- Se puede correr más de una vez.
+
+-- 1. Crear reporte
+create or replace function rep_crear(p_prioridad text, p_departamento text, p_descripcion text, p_datos jsonb)
+returns table (r_id uuid, r_folio text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_anio int;
+  v_n int;
+  v_folio text;
+  v_id uuid;
+  v_nombre text := rep_mi_nombre();
+begin
+  if not rep_tiene('crear') then raise exception 'No tienes permiso para crear reportes.'; end if;
+  if coalesce(p_prioridad, '') = '' then raise exception 'Selecciona la prioridad.'; end if;
+  if p_departamento not in ('Operativo', 'Atención') then raise exception 'Elige el departamento que atenderá el reporte.'; end if;
+  if btrim(coalesce(p_descripcion, '')) = '' then raise exception 'Escribe la descripción de lo observado.'; end if;
+
+  v_anio := extract(year from (now() at time zone 'America/Cancun'))::int;
+  select coalesce(max(substring(x.folio from '([0-9]+)$')::int), 0) + 1 into v_n
+  from rep_reportes x where x.anio = v_anio;
+  v_folio := 'REP/' || v_anio || '/' || lpad(v_n::text, 5, '0');
+
+  insert into rep_reportes (folio, anio, prioridad, departamento, descripcion, instrucciones,
+    lugar, colonia, supermanzana, tipo_usuario, elaboro_id, elaboro_nombre, datos)
+  values (v_folio, v_anio, p_prioridad, p_departamento, btrim(p_descripcion),
+    p_datos ->> 'Instrucciones', p_datos ->> 'Lugar', p_datos ->> 'Colonia',
+    p_datos ->> 'Supermanzana', p_datos ->> 'TipoUsuario', auth.uid(), v_nombre, coalesce(p_datos, '{}'::jsonb))
+  returning rep_reportes.id into v_id;
+
+  insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+  values (v_id, auth.uid(), v_nombre, 'Registró el reporte',
+    'Departamento: ' || p_departamento || ' · Prioridad: ' || p_prioridad);
+
+  return query select v_id, v_folio;
+end;
+$$;
+
+-- 2. Editar datos del reporte (guarda y registra qué campos cambiaron, con valor anterior → nuevo)
+create or replace function rep_editar(p_id uuid, p_departamento text, p_datos jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r rep_reportes%rowtype;
+  v_cambios text;
+  v_depto text;
+begin
+  if not rep_tiene('editar') then raise exception 'No tienes permiso para editar reportes.'; end if;
+  select * into r from rep_reportes where id = p_id for update;
+  if not found or not rep_puede_ver(r.departamento, r.estatus) then raise exception 'El reporte no existe.'; end if;
+  if r.estatus = 'Anulado' then raise exception 'Este reporte ya no se puede editar.'; end if;
+  if r.estatus <> 'Pendiente' and not rep_tiene('editar_cerrados') then
+    raise exception 'Este reporte ya no se puede editar.';
+  end if;
+
+  v_depto := coalesce(p_departamento, r.departamento);
+  if v_depto <> r.departamento then
+    if not rep_tiene('cambiar_departamento') then raise exception 'No puedes cambiar el departamento.'; end if;
+    if v_depto not in ('Operativo', 'Atención') then raise exception 'Elige el departamento que atenderá el reporte.'; end if;
+  end if;
+  if coalesce(p_datos ->> 'Prioridad', '') = '' then raise exception 'Selecciona la prioridad.'; end if;
+  if btrim(coalesce(p_datos ->> 'Descripcion', '')) = '' then raise exception 'Escribe la descripción de lo observado.'; end if;
+
+  -- Lista de campos que cambiaron
+  select string_agg(
+           k || ': ' || coalesce(nullif(r.datos ->> k, ''), '(vacío)') || ' → ' || coalesce(nullif(v, ''), '(vacío)'),
+           E'\n')
+    into v_cambios
+  from jsonb_each_text(coalesce(p_datos, '{}'::jsonb)) as t(k, v)
+  where coalesce(r.datos ->> k, '') <> coalesce(v, '');
+
+  update rep_reportes set
+    datos = datos || coalesce(p_datos, '{}'::jsonb),
+    departamento = v_depto,
+    prioridad = p_datos ->> 'Prioridad',
+    descripcion = btrim(p_datos ->> 'Descripcion'),
+    instrucciones = p_datos ->> 'Instrucciones',
+    lugar = p_datos ->> 'Lugar',
+    colonia = p_datos ->> 'Colonia',
+    supermanzana = p_datos ->> 'Supermanzana',
+    tipo_usuario = p_datos ->> 'TipoUsuario',
+    actualizado = now()
+  where id = p_id;
+
+  if v_cambios is not null then
+    insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+    values (p_id, auth.uid(), rep_mi_nombre(), 'Editó datos del reporte', v_cambios);
+  end if;
+end;
+$$;
+
+-- 3. Guardar atención (avance o cierre) y reemplazar las personas atendidas
+--    p_datos: Localizada ('Sí' / 'No') y ComentariosVisita. p_resultado se calcula en la app.
+create or replace function rep_guardar_atencion(
+  p_id uuid, p_datos jsonb, p_personas jsonb, p_terminar boolean, p_resultado text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r rep_reportes%rowtype;
+  v_cerrado boolean;
+  v_loc text := coalesce(p_datos ->> 'Localizada', '');
+  v_estatus text;
+  v_primera boolean;
+  v_resumen text;
+begin
+  if not rep_tiene('atender') then raise exception 'No tienes permiso para atender reportes.'; end if;
+  select * into r from rep_reportes where id = p_id for update;
+  if not found or not rep_puede_ver(r.departamento, r.estatus) then raise exception 'El reporte no existe.'; end if;
+  if r.estatus = 'Anulado' then raise exception 'Un reporte anulado no se puede atender.'; end if;
+  v_cerrado := r.estatus <> 'Pendiente';
+  if v_cerrado and not rep_tiene('editar_cerrados') then raise exception 'Este reporte ya está cerrado.'; end if;
+  if jsonb_array_length(coalesce(p_personas, '[]'::jsonb)) > 40 then raise exception 'Máximo 40 personas por reporte.'; end if;
+  if v_loc not in ('Sí', 'No') then
+    if coalesce(p_terminar, false) then raise exception 'Indica si se encontró a la persona.'; end if;
+  end if;
+  if coalesce(p_terminar, false) and v_loc = 'Sí' and jsonb_array_length(coalesce(p_personas, '[]'::jsonb)) = 0 then
+    raise exception 'Agrega al menos una persona atendida.';
+  end if;
+
+  v_estatus := case when v_loc = 'Sí' then 'Atendido' when v_loc = 'No' then 'No localizado' else null end;
+  v_primera := r.atiende_id is null;
+  v_resumen := case when v_loc = 'Sí' then 'Se encontró a ' || jsonb_array_length(coalesce(p_personas, '[]'::jsonb)) || ' persona(s)'
+                    when v_loc = 'No' then 'No se encontró a la persona' else '' end;
+
+  update rep_reportes set
+    datos = datos || coalesce(p_datos, '{}'::jsonb),
+    atiende_id = coalesce(atiende_id, auth.uid()),
+    atiende_nombre = coalesce(atiende_nombre, rep_mi_nombre()),
+    inicio_atencion = coalesce(inicio_atencion, now()),
+    estatus = case when (coalesce(p_terminar, false) or v_cerrado) and v_estatus is not null then v_estatus else estatus end,
+    cerro_id = case when coalesce(p_terminar, false) and not v_cerrado then auth.uid() else cerro_id end,
+    cerro_nombre = case when coalesce(p_terminar, false) and not v_cerrado then rep_mi_nombre() else cerro_nombre end,
+    fecha_cierre = case when coalesce(p_terminar, false) and not v_cerrado then now() else fecha_cierre end,
+    actualizado = now()
+  where id = p_id;
+
+  delete from rep_personas where reporte_id = p_id;
+  insert into rep_personas (reporte_id, num, datos)
+  select p_id, t.ord::int, t.val
+  from jsonb_array_elements(coalesce(p_personas, '[]'::jsonb)) with ordinality as t(val, ord);
+
+  if v_primera then
+    insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+    values (p_id, auth.uid(), rep_mi_nombre(), 'Inició la atención', v_resumen);
+  end if;
+  if v_cerrado then
+    insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+    values (p_id, auth.uid(), rep_mi_nombre(), 'Editó la atención', v_resumen || ' · Estatus: ' || coalesce(v_estatus, r.estatus));
+  elsif coalesce(p_terminar, false) then
+    insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+    values (p_id, auth.uid(), rep_mi_nombre(), 'Cerró el reporte: ' || coalesce(v_estatus, ''), v_resumen);
+  elsif not v_primera then
+    insert into rep_historial (reporte_id, perfil_id, usuario_nombre, accion, detalle)
+    values (p_id, auth.uid(), rep_mi_nombre(), 'Guardó avance de la atención', v_resumen);
+  end if;
+end;
+$$;
+
+-- Verificación: debe mostrar 'ok' si las funciones quedaron actualizadas
+select 'ok' as funciones_actualizadas;

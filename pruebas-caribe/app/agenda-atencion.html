@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F7F6F2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Agenda de atención · IMCA</title>
+<style>
+  :root {
+    --bg: var(--arena); --card: var(--tarjeta); --ink: var(--tinta-c); --muted: var(--gris-c); --line: var(--linea-c);
+    --brand: var(--turquesa); --brand-soft: var(--arena-2);
+    --ok: var(--ok); --ok-soft: var(--ok-soft);
+    --bad: var(--bad); --bad-soft: var(--bad-soft);
+    --warn: var(--warn); --warn-soft: var(--warn-soft);
+    --gris-soft: var(--arena-2); --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  .oculto { display: none !important; }
+
+  header { position: sticky; top: 0; z-index: 5;
+    background: linear-gradient(135deg, var(--turquesa) 0%, var(--laguna) 70%, var(--laguna) 100%); color: #fff;
+    padding: 16px 18px 18px; display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 6px 18px rgba(44,62,80,.25); border-radius: 0 0 22px 22px; }
+  header h1 { font-size: 19px; margin: 0; font-weight: 750; letter-spacing: .2px; }
+  header h1::after { content: ""; display: block; width: 28px; height: 3px; border-radius: 2px; background: var(--coral); margin-top: 6px; }
+  header .quien { font-size: 12px; opacity: .85; text-align: right; }
+  header a, header button { background: none; border: 0; color: #fff; font-size: 12px; text-decoration: underline; padding: 0; cursor: pointer; }
+
+  main { padding: 12px 16px 104px; max-width: 760px; margin: 0 auto; }
+
+  nav.tabs { position: fixed; bottom: calc(10px + env(safe-area-inset-bottom)); left: 12px; right: 12px; z-index: 6;
+    background: rgba(255, 255, 255, .96); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 10px 28px rgba(28, 35, 33, .18);
+    display: flex; padding: 6px; gap: 2px; }
+  nav.tabs button { flex: 1; min-width: 0; border: 0; background: none; padding: 8px 2px 7px; font-size: 11px;
+    color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; border-radius: 14px; transition: background .2s, color .2s; }
+  nav.tabs button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  nav.tabs button.activo { color: #fff; background: var(--brand); font-weight: 650; box-shadow: 0 4px 12px rgba(44,62,80,.35); }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 12px;
+    box-shadow: 0 2px 10px rgba(28, 35, 33, .05); }
+  h2 { font-size: 18px; margin: 4px 0 12px; }
+  h3 { font-size: 13px; margin: 16px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+  label { display: block; font-size: 12.5px; color: var(--muted); margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--tarjeta); outline: none; font-size: 16px; }
+  input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+  textarea { min-height: 70px; resize: vertical; }
+  .fila { display: flex; gap: 10px; }
+  .fila > * { flex: 1; min-width: 0; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line);
+    background: var(--tarjeta); border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 550; text-decoration: none; color: var(--ink); }
+  .btn.pri { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.ok { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .btn.bad { background: var(--tarjeta); border-color: var(--bad); color: var(--bad); }
+  .btn.wa { background: var(--ok); border-color: var(--ok); color: #fff; }
+  .btn.full { width: 100%; padding: 13px; margin-top: 14px; }
+  .btn.sm { padding: 7px 10px; font-size: 13px; }
+  .btn:disabled { opacity: .5; }
+  .adjuntar { position: relative; overflow: hidden; margin-top: 6px; }
+  .adjuntar input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { border: 1px solid var(--line); background: var(--tarjeta); border-radius: 20px; padding: 7px 13px; font-size: 13px; cursor: pointer; transition: background .2s, color .2s; }
+  .seg button.on { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 3px 10px rgba(44,62,80,.28); }
+
+  .barra-fecha { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .barra-fecha .btn { padding: 9px 13px; }
+  .barra-fecha input { flex: 1; }
+  .titulo-dia { font-weight: 700; font-size: 17px; margin: 6px 2px 12px; color: var(--ink); }
+  .titulo-dia::before { content: ""; display: inline-block; width: 4px; height: 16px; border-radius: 2px; background: var(--coral); margin-right: 8px; vertical-align: -2px; }
+
+  .cita { display: flex; gap: 12px; width: 100%; text-align: left; background: var(--card); border: 1px solid var(--line);
+    border-left: 5px solid var(--brand); border-radius: 16px; padding: 13px 14px; margin-bottom: 10px; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(28, 35, 33, .06); transition: transform .15s, box-shadow .15s; }
+  .cita:active { transform: scale(.985); }
+  .cita .hora { min-width: 56px; font-weight: 750; font-size: 17px; color: var(--brand); }
+  .cita .hora small { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; }
+  .cita .info { flex: 1; min-width: 0; }
+  .cita .nombre { font-weight: 600; }
+  .cita .meta { color: var(--muted); font-size: 13px; }
+  .cita.apagada { opacity: .55; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .chip { font-size: 11.5px; padding: 2px 8px; border-radius: 10px; background: var(--gris-soft); color: var(--muted); font-weight: 600; }
+  .chip.ok { background: var(--ok-soft); color: var(--ok); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.brand { background: var(--brand-soft); color: var(--brand); }
+  .acciones { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+
+  nav.tabs button { position: relative; }
+  .badge { position: absolute; top: 4px; left: 56%; background: var(--bad); color: #fff; font-size: 10px; min-width: 17px; height: 17px;
+    border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; font-weight: 700; }
+  .grid-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .stat { background: linear-gradient(160deg, var(--tarjeta) 0%, var(--arena-2) 100%); border: 1px solid var(--line); border-radius: 18px; padding: 14px;
+    box-shadow: 0 2px 10px rgba(28, 35, 33, .05); }
+  .stat b { display: block; font-size: 28px; font-weight: 750; color: var(--brand); }
+  .stat small { color: var(--muted); font-size: 12.5px; }
+  .vacio { text-align: center; color: var(--muted); padding: 36px 10px; }
+  .nota { font-size: 12.5px; color: var(--muted); margin: 6px 0; }
+  .link { background: none; border: 0; color: var(--brand); text-decoration: underline; cursor: pointer; padding: 6px 0; font-size: 13.5px; }
+  .aviso-tel { margin-top: 10px; padding: 9px 12px; border-radius: 10px; background: var(--warn-soft); color: var(--warn); font-size: 13.5px; }
+
+  .bloqueo { background: repeating-linear-gradient(135deg, var(--arena-2), var(--arena-2) 8px, var(--sol-suave) 8px, var(--sol-suave) 16px);
+    border: 1.5px dashed var(--sol); color: var(--warn); border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; font-size: 13.5px; }
+  .bloqueo b { display: block; font-size: 14px; }
+
+  .buscador { position: relative; margin-bottom: 10px; }
+  .buscador input { padding-left: 14px; }
+  .resultados { border: 1px solid var(--line); border-radius: 10px; margin-top: 6px; overflow: hidden; background: var(--tarjeta); }
+  .resultados button { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line); background: var(--tarjeta); cursor: pointer; }
+  .resultados button:last-child { border-bottom: 0; }
+  .resultados small { color: var(--muted); }
+  .seleccion { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--brand-soft);
+    border-radius: 10px; padding: 10px 12px; margin-top: 6px; }
+  .sim { background: var(--tarjeta); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  .sim small { color: var(--muted); }
+
+  .modal-fondo { position: fixed; inset: 0; background: rgba(44,62,80,.45); z-index: 20; display: flex; align-items: flex-end; justify-content: center; }
+  .modal { background: var(--bg); width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto;
+    border-radius: 18px 18px 0 0; padding: 16px 16px 28px; }
+  .modal .cerrar { float: right; border: 0; background: var(--gris-soft); border-radius: 50%; width: 32px; height: 32px; font-size: 18px; cursor: pointer; }
+
+  #toast { position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%); background: var(--tinta-c); color: #fff; padding: 10px 16px;
+    border-radius: 10px; font-size: 14px; z-index: 30; max-width: 92%; text-align: center; }
+  #toast.error { background: var(--bad); }
+  #cargando { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--brand); z-index: 40; animation: carga 1s infinite linear; transform-origin: left; }
+  @keyframes carga { 0% { transform: scaleX(.05); } 50% { transform: scaleX(.7); } 100% { transform: scaleX(1); opacity: .2; } }
+
+  /* ---------- Diseño v2 (solo presentación) ---------- */
+  html, body { background: var(--arena-2); }
+  header { position: relative; overflow: hidden;
+    background: linear-gradient(135deg, var(--turquesa) 0%, var(--laguna) 60%, var(--laguna) 100%);
+    padding: 18px 18px 22px; border-radius: 0 0 26px 26px; box-shadow: 0 10px 26px rgba(44,62,80,.30); }
+  header::before { content: ""; position: absolute; width: 220px; height: 220px; right: -70px; top: -110px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(167,123,92,.42) 0%, rgba(167,123,92,0) 70%); pointer-events: none; }
+  header::after { content: ""; position: absolute; width: 160px; height: 160px; left: -60px; bottom: -90px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.14) 0%, rgba(255,255,255,0) 70%); pointer-events: none; }
+  header h1 { font-size: 20px; font-weight: 750; position: relative; z-index: 1; }
+  header .quien { position: relative; z-index: 1; background: rgba(255,255,255,.14); border-radius: 12px; padding: 6px 10px; font-size: 12.5px; }
+
+  main { max-width: 760px; padding: 16px 16px 118px; }
+
+  nav.tabs { bottom: calc(12px + env(safe-area-inset-bottom)); left: 14px; right: 14px; border-radius: 24px;
+    background: rgba(255,255,255,.92); box-shadow: 0 14px 34px rgba(44,62,80,.22); border: 1px solid rgba(255,255,255,.7); padding: 7px; }
+  nav.tabs button { border-radius: 18px; padding: 9px 2px 8px; }
+  nav.tabs button.activo { background: linear-gradient(135deg, var(--turquesa), var(--laguna)); box-shadow: 0 6px 16px rgba(44,62,80,.38); }
+  nav.tabs button.activo svg { stroke: var(--tarjeta); }
+  nav.tabs button.activo span:first-of-type { color: #fff; }
+
+  .card { border-radius: 20px; box-shadow: 0 6px 20px rgba(44,62,80,.06); }
+  .titulo-dia { font-size: 18px; margin: 8px 4px 14px; }
+  .titulo-dia::before { width: 5px; height: 18px; background: linear-gradient(var(--coral), var(--coral)); }
+
+  .barra-fecha { background: var(--tarjeta); border-radius: 18px; padding: 8px; box-shadow: 0 6px 18px rgba(44,62,80,.06); }
+  .barra-fecha input { border: 0; background: var(--arena-2); border-radius: 12px; }
+  .barra-fecha .btn { border: 0; background: var(--arena-2); border-radius: 12px; }
+
+  .cita { position: relative; border: 0; border-left: 5px solid var(--turquesa); border-radius: 18px; padding: 14px 16px;
+    box-shadow: 0 6px 18px rgba(44,62,80,.07); transition: transform .18s ease, box-shadow .18s ease; }
+  .cita:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(44,62,80,.12); }
+  .cita:has(.chip.ok) { border-left-color: var(--ok); }
+  .cita:has(.chip.bad) { border-left-color: var(--bad); background: var(--tarjeta); }
+  .cita:has(.chip.warn) { border-left-color: var(--coral); }
+  .cita.apagada { opacity: .6; }
+  .cita .hora { min-width: 60px; font-size: 18px; font-weight: 750; color: var(--turquesa); }
+  .cita .hora small { color: var(--gris-c); font-size: 11px; }
+  .cita .nombre { font-size: 15px; }
+  .chip { border-radius: 999px; padding: 3px 10px; font-size: 11.5px; }
+  .chip.brand { background: var(--arena-2); color: var(--turquesa); }
+
+  .seg button { border-radius: 999px; padding: 8px 14px; box-shadow: 0 2px 6px rgba(44,62,80,.05); }
+  .seg button.on { background: linear-gradient(135deg, var(--turquesa), var(--laguna)); }
+  .btn { border-radius: 14px; }
+  .btn.pri { background: linear-gradient(135deg, var(--turquesa), var(--laguna)); border-color: transparent; box-shadow: 0 6px 16px rgba(44,62,80,.28); }
+  .stat { border-radius: 20px; background: linear-gradient(160deg, var(--tarjeta) 0%, var(--arena-2) 100%); }
+  .bloqueo { border-radius: 18px; }
+
+  @media (min-width: 900px) {
+    body { padding-left: 236px; }
+    header { margin-left: 0; border-radius: 0 0 22px 22px; padding: 18px 28px 20px; }
+    main { max-width: 980px; margin: 0 auto; padding: 22px 28px 40px; }
+    nav.tabs { top: 0; bottom: 0; left: 0; right: auto; width: 236px; flex-direction: column; justify-content: flex-start;
+      gap: 6px; padding: 92px 14px 24px; border-radius: 0; border: 0; background: linear-gradient(180deg, var(--laguna) 0%, var(--laguna) 100%);
+      box-shadow: none; overflow-y: auto; }
+    nav.tabs button { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 12px 14px;
+      font-size: 14.5px; color: rgba(255,255,255,.78); border-radius: 14px; position: relative; }
+    nav.tabs button svg { width: 20px; height: 20px; }
+    nav.tabs button:hover { background: rgba(255,255,255,.10); color: #fff; }
+    nav.tabs button.activo { background: rgba(255,255,255,.18); color: #fff; box-shadow: none; }
+    nav.tabs button.activo span:first-of-type { color: #fff; }
+    nav.tabs .badge { position: static; margin-left: auto; background: var(--coral); color: var(--warn); }
+    header { position: sticky; left: 0; right: 0; }
+    .card { padding: 20px; }
+  }
+
+  /* ---------- Diseño v3 (marcas, resumen, paleta IMCA) ---------- */
+  header { background: linear-gradient(120deg, var(--turquesa) 0%, var(--laguna) 70%, var(--laguna) 100%); flex-wrap: wrap; gap: 6px 14px; justify-content: flex-start; }
+  .marcas { display: flex; align-items: center; gap: 12px; background: var(--tarjeta); border-radius: 14px; padding: 6px 12px; width: 100%; box-sizing: border-box; order: -1; }
+  .marcas img { display: block; }
+  header h1 { width: 100%; }
+  header h1::after { background: var(--coral); }
+  header .quien { margin-left: auto; }
+
+  .ag-grid { display: block; }
+  .ag-side { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+  .ag-resumen { background: linear-gradient(160deg, var(--arena-2) 0%, var(--tarjeta) 100%); border-color: var(--arena-2); }
+  .ag-resumen h3, .ag-acciones h3 { margin-top: 0; color: var(--turquesa); text-transform: none; font-size: 15px; letter-spacing: 0; }
+  .ag-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .ag-stat { background: var(--tarjeta); border-radius: 16px; padding: 12px; border: 1px solid var(--line); box-shadow: 0 4px 12px rgba(44,62,80,.05); }
+  .ag-stat b { display: block; font-size: 26px; font-weight: 750; }
+  .ag-stat span { font-size: 12px; color: var(--muted); }
+  .ag-stat.verde b { color: var(--ok); }
+  .ag-stat.ambar b { color: var(--warn); }
+  .ag-stat.rojo b { color: var(--bad); }
+  .ag-stat.guinda b { color: var(--turquesa); }
+  .ag-acciones .btn { margin-top: 8px; }
+  .ag-acciones .btn.pri { background: var(--coral); border-color: var(--coral); box-shadow: 0 6px 16px rgba(167,123,92,.28); }
+
+  @media (min-width: 900px) {
+    .ag-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+    .ag-side { margin-top: 0; position: sticky; top: 110px; }
+    .marcas { width: auto; order: 0; background: transparent; padding: 0; }
+    header { padding: 12px 28px; }
+    header h1 { width: auto; }
+    header h1::after { display: none; }
+    nav.tabs { background: var(--turquesa) url("img/emblema-sol.png") no-repeat 50% 100% / 170px auto; }
+    nav.tabs button.activo { background: var(--coral); box-shadow: 0 6px 16px rgba(167,123,92,.35); }
+    nav.tabs button.activo span:first-of-type { color: #fff; }
+  }
+
+  /* ---------- Diseño v4 (ajustes finos) ---------- */
+  .pag-titulo { display: flex; align-items: center; gap: 14px; margin: 4px 2px 16px; }
+  .pag-titulo h2 { margin: 0; font-size: 22px; font-weight: 750; color: var(--turquesa); }
+  .pag-titulo p { margin: 2px 0 0; font-size: 13.5px; color: var(--muted); }
+  .pag-icono { width: 44px; height: 44px; border-radius: 14px; background: var(--arena-2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .pag-icono svg { width: 24px; height: 24px; stroke: var(--coral); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+  .ag-stat { position: relative; padding: 12px 12px 12px 12px; }
+  .ag-ico { width: 34px; height: 34px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
+  .ag-ico svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .ag-stat.verde .ag-ico { background: var(--ok-soft); color: var(--ok); }
+  .ag-stat.ambar .ag-ico { background: var(--warn-soft); color: var(--warn); }
+  .ag-stat.rojo .ag-ico { background: var(--bad-soft); color: var(--bad); }
+  .ag-stat.guinda .ag-ico { background: var(--arena-2); color: var(--turquesa); }
+
+  header .marcas { background: transparent; }
+
+  @media (min-width: 900px) {
+    header { position: fixed; top: 0; left: 0; right: 0; height: 86px; z-index: 7; background: var(--tarjeta); color: var(--ink);
+      padding: 0 28px 0 18px; box-shadow: 0 2px 14px rgba(44,62,80,.08); border-radius: 0; margin: 0; }
+    header::before, header::after { display: none; }
+    header h1 { display: none; }
+    header .quien { color: var(--ink); background: var(--arena-2); }
+    header .quien a { color: var(--turquesa); }
+    .marcas { padding: 0; }
+    body { padding-top: 86px; }
+    nav.tabs { top: 86px; padding-top: 22px; background: var(--turquesa); overflow: hidden; }
+    nav.tabs::after { content: ""; position: absolute; right: -60px; bottom: -40px; width: 220px; height: 220px;
+      background: url("img/emblema-sol.png") no-repeat center / contain; opacity: .16; pointer-events: none; }
+    nav.tabs > * { position: relative; z-index: 1; }
+    main { padding-top: 26px; }
+  }
+
+  /* ---------- Ajustes de color aprobados (solo CSS) ---------- */
+  header { background: linear-gradient(160deg, var(--titulo), var(--titulo)); box-shadow: var(--sombra); }
+  header::before, header::after { display: none; }
+  header h1 { font-family: "Sora", system-ui, sans-serif; font-weight: 600; color: var(--fondo); }
+  header .quien { color: rgba(74,85,104,.75); background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 12px; }
+  header a, header button { color: rgba(74,85,104,.75); }
+  header .marcas { display: inline-flex; width: auto; background: #fff; border-radius: 16px; padding: 8px 14px;
+    box-shadow: 0 6px 18px -8px rgba(44,62,80,.35); }
+
+  input, select, textarea { background: #fff; border: 1px solid var(--linea); border-radius: 12px; }
+  .barra-fecha { background: var(--tarjeta); border: 1px solid var(--linea); }
+  .barra-fecha input { background: #fff; border: 1px solid var(--linea); border-radius: 12px; }
+  .barra-fecha .btn { background: #fff; border: 1px solid var(--linea); border-radius: 12px; }
+
+  .seg { background: var(--gris-suave); }
+  .seg button.on { background: #fff; color: var(--titulo); box-shadow: 0 1px 2px rgba(44,62,80,.05), 0 8px 24px -12px rgba(44,62,80,.18); }
+
+  h2, .titulo-dia, .ag-resumen h3, .ag-acciones h3, .stat b, .cita .hora { color: var(--titulo); }
+
+  .card, .stat, .barra-fecha, .cita, .cita:hover, .btn, .btn.pri { box-shadow: 0 1px 2px rgba(44,62,80,.05), 0 8px 24px -12px rgba(44,62,80,.18); }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="imca-caribe.css">
+<link rel="stylesheet" href="imca-agenda.css">
+</head>
+<body>
+
+<div id="cargando" class="oculto"></div>
+<div id="toast" class="oculto"></div>
+
+<header>
+  <div class="marcas"><img class="logo-institucional" src="img/emblema-sol.png" alt="Gobierno Municipal Benito Juárez"><img class="logo-institucional" src="img/imca-logo.png" alt="IMCA"></div>
+  <h1>Agenda de atención</h1>
+  <div class="quien"><span id="h-nombre"></span><br><a href="index.html">Plataforma</a></div>
+</header>
+
+<main id="contenido"><div class="vacio">Cargando…</div></main>
+
+<nav class="tabs" id="tabs"></nav>
+<div id="modal-raiz"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+/* ---------------- Configuración ---------------- */
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+var FUNC_CALENDARIO = SUPABASE_URL + '/functions/v1/calendario';
+
+var ROLES_VER = ['admin', 'agenda', 'coordinacion', 'terapeuta', 'consulta'];
+var ROLES_NUEVA = ['admin', 'agenda'];
+var HORAS = [];
+for (var hh = 8; hh < 19; hh++) HORAS.push(('0' + hh).slice(-2) + ':00');   // 08:00 a 18:00, citas en punto
+var DURACION = 40;
+var MAX_ADJ_MB = 8;
+
+var CONFIRMACION = ['Por confirmar', 'Confirmó', 'No contesta', 'Canceló', 'Reprogramar'];
+var CONF_BOTONES = [
+  { v: 'Confirmó', txt: 'Confirmó', cls: 'ok' },
+  { v: 'No contesta', txt: 'No contesta', cls: '' },
+  { v: 'Reprogramar', txt: 'Cambio', cls: '' },
+  { v: 'Canceló', txt: 'Canceló', cls: 'bad' }
+];
+var PERIODOS = ['Esta semana', 'Este mes', 'Mes pasado', 'Últimos 3 meses', 'Este año'];
+var MOTIVOS = ['No avisó / no llegó', 'Canceló con aviso', 'Reprogramó', 'Enfermedad', 'Trabajo / horario', 'Llegó a otra oficina', 'Otro'];
+var ORIGENES = ['WhatsApp', 'Oficina', 'Llamada', 'Otro'];
+var COMO_SUPO = ['Familiar, amigo o conocido', 'Escuela (especificar)', 'Plática, feria o jornada del IMCA (especificar)', 'Redes sociales del IMCA',
+  'Internet (Google, páginas)', 'Radio, TV o prensa', 'Fiscalía', 'Juzgado cívico', 'DIF',
+  'Centro de salud u hospital', 'Ya había venido antes', 'Otra institución (especificar)', 'Otro (especificar)'];
+var PLANTILLA_WA = 'Hola {nombre}, buen día. Te escribimos para recordarte tu cita del {dia} a las {hora} en la oficina {oficina}. ¿Nos confirmas tu asistencia? Responde SÍ para confirmar o CAMBIO si necesitas otra fecha.';
+var ICONO_ESTADO = { 'Por confirmar': '⏳', 'Confirmó': '✅', 'No contesta': '📵', 'Reprogramar': '🔁' };
+
+var CITA_SELECT = 'id, numero, paciente_id, terapeuta_id, oficina_id, fecha, hora, duracion, tipo, origen, como_supo, como_supo_detalle, ' +
+  'observaciones, confirmacion, asistencia, motivo, evento_google, reprogramada_de, num_seguimiento, sin_cita, modalidad, ' +
+  'pacientes(numero, nombre, telefono, edad, sexo), perfiles!citas_terapeuta_id_fkey(nombre), oficinas(nombre)';
+
+var DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+var MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+var S = { perfil: null, terapeutas: [], oficinas: [], hoy: '', fecha: '', tab: 'agenda',
+          filtros: { terapeuta: '', oficina: '' }, lista: [], paciente: null, nueva: null };
+
+/* ---------------- Utilidades ---------------- */
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function soloDigitos(s) { return String(s || '').replace(/\D/g, ''); }
+function aFecha(s) { var p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+function deFecha(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+function hoyStr() { return deFecha(new Date()); }
+function sumarDias(s, n) { var d = aFecha(s); d.setDate(d.getDate() + n); return deFecha(d); }
+function diaLargo(s) { var d = aFecha(s); return DIAS[d.getDay()] + ' ' + d.getDate() + ' de ' + MESES[d.getMonth()]; }
+function diaCorto(s) { var d = aFecha(s); return DIAS[d.getDay()].slice(0, 3) + ' ' + d.getDate() + '/' + (d.getMonth() + 1); }
+function horaAhora() { var a = new Date(); return ('0' + a.getHours()).slice(-2) + ':' + ('0' + a.getMinutes()).slice(-2); }
+function sumarMinutos(hora, min) {
+  var p = hora.split(':').map(Number), t = p[0] * 60 + p[1] + min;
+  return ('0' + Math.floor(t / 60)).slice(-2) + ':' + ('0' + (t % 60)).slice(-2);
+}
+function textoTipo(c) {
+  return c.tipo + (c.tipo === 'Seguimiento' && c.numSeguimiento ? ' ' + c.numSeguimiento : '') +
+    (c.modalidad === 'Terapia grupal' ? ' · Grupal' : '');
+}
+
+function toast(msg, error) {
+  var t = $('toast'); t.textContent = msg; t.className = error ? 'error' : '';
+  clearTimeout(toast._t); toast._t = setTimeout(function () { t.className = 'oculto'; }, error ? 4500 : 2200);
+}
+function cargando(on) { $('cargando').classList.toggle('oculto', !on); }
+
+// Convierte la respuesta de Supabase en datos, o lanza el error con su mensaje.
+function chk(res) { if (res.error) throw new Error(res.error.message); return res.data; }
+
+// Ejecuta una acción con la barra de carga. Si falla, muestra el motivo y devuelve null.
+async function run(fn) {
+  cargando(true);
+  try { return await fn(); }
+  catch (e) { toast(e.message || 'Algo salió mal. Intenta de nuevo.', true); return null; }
+  finally { cargando(false); }
+}
+
+function bitacora(accion, detalle) {
+  sb.from('bitacora_agenda').insert({ usuario: S.perfil.id, accion: accion, detalle: detalle || '' });
+}
+
+function esAgenda() { return S.perfil.rol === 'admin' || S.perfil.rol === 'agenda'; }
+function esTerapeutaRol(rol) { return rol === 'terapeuta' || rol === 'coordinacion' || rol === 'admin'; }
+function puedeTocar(c) { return esAgenda() || (esTerapeutaRol(S.perfil.rol) && c.terapeutaId === S.perfil.id); }
+function puedeAgendar() { return esAgenda(); }
+function puedeSinCita() { return esAgenda() || S.perfil.rol === 'terapeuta'; }
+function puedeConfirmar() { return esAgenda(); }
+// Marcar llegó / no llegó: agenda y admin marcan cualquiera; cada terapeuta, las suyas.
+function puedeMarcar(c) { return esAgenda() || (S.perfil.rol === 'terapeuta' && c.terapeutaId === S.perfil.id); }
+
+/* ---------------- Google Calendar ---------------- */
+async function calendario(ruta, cuerpo) {
+  var sesion = await sb.auth.getSession();
+  var token = sesion.data.session ? sesion.data.session.access_token : '';
+  var r = await fetch(FUNC_CALENDARIO + ruta, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token, apikey: SUPABASE_ANON_KEY },
+    body: JSON.stringify(cuerpo)
+  });
+  var j = await r.json().catch(function () { return {}; });
+  if (!r.ok) throw new Error(j.error || 'Google Calendar no respondió.');
+  return j;
+}
+
+// Si Google falla, la cita ya quedó guardada en la agenda: solo se avisa.
+async function conCalendario(promesa) {
+  try { return await promesa; }
+  catch (e) { toast('La agenda se guardó, pero Google Calendar no se actualizó: ' + e.message, true); return null; }
+}
+
+// En Google Calendar solo van el tipo y el nombre. Folio, notas y estado se quedan en la agenda.
+function tituloEvento(c) {
+  var tipo = c.tipo === 'Primer contacto' ? 'Primer contacto' : 'Seguimiento' + (c.numSeguimiento ? ' ' + c.numSeguimiento : '');
+  return tipo + ' – ' + c.pacienteNombre;
+}
+
+function descripcionEvento(c) {
+  return '';
+}
+
+async function sincronizarNuevaCita(c) {
+  var fin = sumarMinutos(c.hora, c.duracion);
+  var r = await conCalendario(calendario('/crear-evento', {
+    terapeuta_id: c.terapeutaId,
+    inicio: c.fecha + 'T' + c.hora + ':00',
+    fin: c.fecha + 'T' + fin + ':00',
+    titulo: tituloEvento(c),
+    descripcion: descripcionEvento(c),
+    ubicacion: 'Oficina ' + c.oficina
+  }));
+  if (r && r.id) await sb.from('citas').update({ evento_google: r.id }).eq('id', c.id);
+}
+
+// Actualiza el título y las notas del evento cuando cambia la cita.
+async function sincronizarCambio(c) {
+  if (!c.eventoId) return;
+  await conCalendario(calendario('/actualizar-evento', {
+    terapeuta_id: c.terapeutaId, evento_id: c.eventoId,
+    titulo: tituloEvento(c), descripcion: descripcionEvento(c)
+  }));
+}
+
+/* ---------------- Datos ---------------- */
+function aCita(r) {
+  return {
+    id: r.id,
+    numero: r.numero,
+    pacienteId: r.paciente_id,
+    pacienteNumero: r.pacientes ? r.pacientes.numero : '',
+    pacienteNombre: r.pacientes ? r.pacientes.nombre : '',
+    telefono: r.pacientes ? (r.pacientes.telefono || '') : '',
+    edad: r.pacientes ? r.pacientes.edad : null,
+    sexo: r.pacientes ? r.pacientes.sexo : null,
+    terapeutaId: r.terapeuta_id,
+    terapeuta: r.perfiles ? r.perfiles.nombre : '',
+    oficinaId: r.oficina_id,
+    oficina: r.oficinas ? r.oficinas.nombre : '',
+    fecha: r.fecha,
+    hora: String(r.hora || '').slice(0, 5),
+    duracion: r.duracion || DURACION,
+    tipo: r.tipo,
+    numSeguimiento: r.num_seguimiento,
+    origen: r.origen,
+    comoSupo: r.como_supo,
+    comoSupoDetalle: r.como_supo_detalle,
+    observaciones: r.observaciones || '',
+    confirmacion: r.confirmacion,
+    asistencia: r.asistencia,
+    motivo: r.motivo,
+    eventoId: r.evento_google,
+    reprogramadaDe: r.reprogramada_de,
+    sinCita: !!r.sin_cita,
+    modalidad: r.modalidad || 'Terapia individual'
+  };
+}
+
+async function leerCita(id) {
+  var res = await sb.from('citas').select(CITA_SELECT).eq('id', id).single();
+  return res.data ? aCita(res.data) : null;
+}
+
+async function historialDe(pacienteId) {
+  var res = await sb.from('citas').select('asistencia, motivo').eq('paciente_id', pacienteId);
+  var h = { citas: 0, llego: 0, faltas: 0, canceladas: 0, nivel: '' };
+  (res.data || []).forEach(function (r) {
+    if (r.asistencia === 'Reprogramada') return;
+    h.citas++;
+    if (r.asistencia === 'Llegó') h.llego++;
+    else if (r.asistencia === 'Cancelada' || (r.asistencia === 'No llegó' && r.motivo === 'Canceló con aviso')) h.canceladas++;
+    else if (r.asistencia === 'No llegó') h.faltas++;
+  });
+  var m = Math.max(h.faltas, h.canceladas);
+  h.nivel = m >= 3 ? 'rojo' : m === 2 ? 'amarillo' : '';
+  return h;
+}
+
+// Aviso por faltas y cancelaciones. Tres o más: se retira la atención.
+function avisoHistorial(h) {
+  if (!h || (!h.faltas && !h.canceladas)) return '';
+  var rojo = h.nivel === 'rojo', amar = h.nivel === 'amarillo';
+  var txt = h.faltas + (h.faltas === 1 ? ' falta' : ' faltas') + ' sin avisar · ' + h.canceladas + (h.canceladas === 1 ? ' cancelación' : ' cancelaciones') +
+    ' · llegó a ' + h.llego + ' de ' + h.citas + ' citas';
+  var col = rojo ? 'var(--rojo)' : amar ? 'var(--ambar)' : 'var(--texto)', fondo = rojo ? 'var(--rojo-suave)' : amar ? 'var(--ambar-suave)' : 'var(--gris-suave)';
+  return '<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:' + fondo + ';border-left:4px solid ' + col + '">' +
+    (rojo ? '<b style="color:' + col + '">Llegó al límite: se le retira la atención</b><br>' :
+     amar ? '<b style="color:' + col + '">Atención: una más y se le retira la atención</b><br>' : '') +
+    '<small>' + esc(txt) + '</small></div>';
+}
+
+// Ocupación de un terapeuta en una fecha: mapa de hora (HH) a motivo de bloqueo u "ocupada".
+async function horasOcupadas(terId, fecha, excluirId) {
+  var mapa = {};
+  var citas = chk(await sb.from('citas').select('id, hora, asistencia').eq('terapeuta_id', terId).eq('fecha', fecha));
+  citas.forEach(function (r) {
+    if (r.id === excluirId) return;
+    if (r.asistencia === 'Cancelada' || r.asistencia === 'Reprogramada') return;
+    mapa[String(r.hora).slice(0, 2)] = 'ocupada';
+  });
+  var bloqueos = chk(await sb.from('bloqueos').select('terapeuta_id, hora_desde, hora_hasta, motivo')
+    .eq('activo', true).lte('desde', fecha).gte('hasta', fecha));
+  bloqueos.forEach(function (b) {
+    if (b.terapeuta_id && b.terapeuta_id !== terId) return;
+    HORAS.forEach(function (h) {
+      var desde = b.hora_desde ? String(b.hora_desde).slice(0, 5) : null;
+      var hasta = b.hora_hasta ? String(b.hora_hasta).slice(0, 5) : null;
+      if (!desde || (h >= desde && (!hasta || h < hasta))) {
+        mapa[h.slice(0, 2)] = 'bloqueada' + (b.motivo ? ' (' + b.motivo + ')' : '');
+      }
+    });
+  });
+  return mapa;
+}
+
+// Llena la lista de horas; las ocupadas, bloqueadas o ya pasadas aparecen deshabilitadas.
+async function llenarHoras(sel, terId, fecha, excluirId) {
+  if (!terId || !fecha) { sel.innerHTML = '<option value="">' + (terId ? 'Elige fecha' : 'Elige terapeuta') + '</option>'; return; }
+  sel.innerHTML = '<option value="">Cargando…</option>';
+  var previa = sel.value;
+  var mapa = await run(function () { return horasOcupadas(terId, fecha, excluirId); });
+  if (!mapa) { sel.innerHTML = '<option value="">Error al cargar</option>'; return; }
+  var ahora = horaAhora(), libres = 0;
+  sel.innerHTML = '<option value="">Selecciona…</option>' + HORAS.map(function (h) {
+    var estado = mapa[h.slice(0, 2)] || '';
+    var pasada = fecha < S.hoy || (fecha === S.hoy && h <= ahora);
+    var no = !!estado || pasada;
+    if (!no) libres++;
+    var texto = h + (estado ? ' · ' + estado : pasada ? ' · ya pasó' : '');
+    return '<option value="' + h + '"' + (no ? ' disabled' : '') + (h === previa && !no ? ' selected' : '') + '>' + esc(texto) + '</option>';
+  }).join('');
+  if (!libres) sel.innerHTML = '<option value="">Sin horas libres este día</option>';
+}
+
+async function citaDelDia(pacienteId, fecha, excluirId) {
+  var res = await sb.from('citas').select(CITA_SELECT).eq('paciente_id', pacienteId).eq('fecha', fecha);
+  var activas = (res.data || []).map(aCita).filter(function (c) {
+    return c.id !== excluirId && c.asistencia !== 'Cancelada' && c.asistencia !== 'Reprogramada';
+  });
+  return activas[0] || null;
+}
+
+async function buscarPacientes(texto) {
+  var q = String(texto || '').replace(/[,()*%]/g, ' ').trim();
+  var res = await sb.from('pacientes').select('id, numero, nombre, telefono, edad')
+    .or('nombre.ilike.%' + q + '%,telefono.ilike.%' + q + '%,numero.ilike.%' + q + '%').order('nombre').limit(15);
+  return res.data || [];
+}
+
+async function buscarParecidos(nombre, telefono) {
+  var condiciones = [];
+  var n = String(nombre || '').replace(/[,()*%]/g, ' ').trim();
+  var t = soloDigitos(telefono);
+  if (n) condiciones.push('nombre.ilike.%' + n + '%');
+  if (t.length === 10) condiciones.push('telefono.eq.' + t);
+  if (!condiciones.length) return [];
+  var res = await sb.from('pacientes').select('id, numero, nombre, telefono, edad').or(condiciones.join(',')).limit(10);
+  return res.data || [];
+}
+
+async function cargarCatalogos() {
+  var ters = await sb.from('perfiles').select('id, nombre').in('rol', ['terapeuta', 'coordinacion', 'admin']).eq('activo', true).order('nombre');
+  var ofs = await sb.from('oficinas').select('id, nombre').eq('activa', true).order('nombre');
+  S.terapeutas = ters.data || [];
+  S.oficinas = ofs.data || [];
+}
+
+/* ---------------- Arranque y navegación ---------------- */
+async function arrancar() {
+  var sesion = await sb.auth.getSession();
+  if (!sesion.data.session) { location.replace('index.html'); return; }
+  var p = await sb.from('perfiles').select('id, nombre, rol, activo').eq('id', sesion.data.session.user.id).single();
+  if (p.error || !p.data || !p.data.activo || ROLES_VER.indexOf(p.data.rol) < 0) { location.replace('index.html'); return; }
+  S.perfil = p.data;
+  S.hoy = hoyStr();
+  S.fecha = S.hoy;
+  $('h-nombre').textContent = S.perfil.nombre;
+  await cargarCatalogos();
+
+  var ICONOS = {
+    agenda: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+    nueva: '<path d="M12 5v14M5 12h14"/>',
+    sincita: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+    confirmar: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
+    pendientes: '<path d="M5 12l5 5L20 7"/>',
+    reportes: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'
+  };
+  var tabs = [{ k: 'agenda', txt: 'Agenda' }];
+  if (puedeAgendar()) tabs.push({ k: 'nueva', txt: 'Nueva' });
+  if (puedeSinCita()) tabs.push({ k: 'sincita', txt: 'Sin cita' });
+  if (puedeConfirmar()) tabs.push({ k: 'confirmar', txt: 'Confirmar' });
+  tabs.push({ k: 'pendientes', txt: 'Pendientes', badge: true });
+  tabs.push({ k: 'reportes', txt: 'Reportes' });
+  $('tabs').innerHTML = tabs.map(function (t) {
+    return '<button data-tab="' + t.k + '"><svg viewBox="0 0 24 24">' + ICONOS[t.k] + '</svg><span>' + t.txt + '</span>' +
+      (t.badge ? '<span class="badge oculto" id="badge-pend"></span>' : '') + '</button>';
+  }).join('');
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) {
+    b.onclick = function () { irA(b.getAttribute('data-tab')); };
+  });
+  actualizarBadge();
+  irA('agenda');
+}
+
+function irA(tab) {
+  S.tab = tab;
+  Array.prototype.forEach.call($('tabs').querySelectorAll('button'), function (b) {
+    b.classList.toggle('activo', b.getAttribute('data-tab') === tab);
+  });
+  window.scrollTo(0, 0);
+  if (tab === 'agenda') vAgenda();
+  else if (tab === 'nueva') vNueva('nueva');
+  else if (tab === 'sincita') vNueva('sincita');
+  else if (tab === 'confirmar') vConfirmar();
+  else if (tab === 'pendientes') vPendientes();
+  else if (tab === 'reportes') vReportes();
+}
+
+/* ---------------- Modal ---------------- */
+function abrirModal(html) {
+  $('modal-raiz').innerHTML = '<div class="modal-fondo" id="m-fondo"><div class="modal">' +
+    '<button class="cerrar" id="m-cerrar" aria-label="Cerrar">×</button>' + html + '</div></div>';
+  $('m-cerrar').onclick = cerrarModal;
+  $('m-fondo').onclick = function (e) { if (e.target.id === 'm-fondo') cerrarModal(); };
+}
+function cerrarModal() { $('modal-raiz').innerHTML = ''; }
+
+/* ---------------- Chips y tarjetas ---------------- */
+function chipConf(v) {
+  var cls = { 'Confirmó': 'ok', 'No contesta': 'warn', 'Canceló': 'bad', 'Reprogramar': 'warn' }[v] || '';
+  return '<span class="chip ' + cls + '">' + esc(v) + '</span>';
+}
+function chipAsist(c) {
+  if (!c.asistencia) return '';
+  var cls = { 'Llegó': 'ok', 'No llegó': 'bad', 'Cancelada': 'bad' }[c.asistencia] || '';
+  return '<span class="chip ' + cls + '">' + esc(c.asistencia) + '</span>';
+}
+function tarjetaCita(c) {
+  var apagada = c.asistencia === 'Cancelada' || c.asistencia === 'Reprogramada';
+  return '<button class="cita' + (apagada ? ' apagada' : '') + '" data-id="' + esc(c.id) + '">' +
+    '<div class="hora">' + esc(c.hora) + '<small>' + c.duracion + ' min</small></div>' +
+    '<div class="info"><div class="nombre">' + esc(c.pacienteNombre) + '</div>' +
+    '<div class="meta">' + esc(textoTipo(c)) + ' · Of. ' + esc(c.oficina) + (S.perfil.rol !== 'terapeuta' ? ' · ' + esc(c.terapeuta) : '') + '</div>' +
+    '<div class="chips">' + chipConf(c.confirmacion) + chipAsist(c) + (c.telefono ? '' : '<span class="chip warn">Sin teléfono</span>') + '</div></div></button>';
+}
+function enlazarCitas(el) {
+  Array.prototype.forEach.call(el.querySelectorAll('.cita'), function (n) {
+    n.onclick = function () {
+      var c = S.lista.filter(function (x) { return x.id === n.getAttribute('data-id'); })[0];
+      if (c) detalle(c);
+    };
+  });
+}
+
+/* ---------------- Vista: Agenda ---------------- */
+function vAgenda() {
+  var filtros = S.perfil.rol !== 'terapeuta'
+    ? '<div class="fila" style="margin-bottom:10px"><select id="f-ter"><option value="">Todos los terapeutas</option>' +
+      S.terapeutas.map(function (t) { return '<option value="' + t.id + '"' + (S.filtros.terapeuta === t.id ? ' selected' : '') + '>' + esc(t.nombre) + '</option>'; }).join('') +
+      '</select><select id="f-ofi"><option value="">Todas las oficinas</option>' +
+      S.oficinas.map(function (o) { return '<option value="' + o.id + '"' + (S.filtros.oficina === o.id ? ' selected' : '') + '>' + esc(o.nombre) + '</option>'; }).join('') +
+      '</select></div>'
+    : '';
+  $('contenido').innerHTML = '<div class="ag-grid"><div class="ag-main">' +
+    '<div class="pag-titulo"><span class="pag-icono"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg></span>' +
+    '<div><h2>Agenda de atención</h2><p>Citas programadas, seguimiento y estado de atención de los terapeutas.</p></div></div>' +
+    '<div class="buscador"><input id="b-q" placeholder="Buscar citas de un usuario (nombre o teléfono)" autocomplete="off"></div>' +
+    '<div id="b-res"></div>' +
+    '<div class="barra-fecha"><button class="btn" id="a-ant" aria-label="Día anterior">‹</button>' +
+    '<input type="date" id="a-fecha" value="' + S.fecha + '"><button class="btn" id="a-sig" aria-label="Día siguiente">›</button>' +
+    '<button class="btn" id="a-hoy">Hoy</button></div>' + filtros +
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">' +
+    '<div class="titulo-dia" style="margin:0">' + esc(cap(diaLargo(S.fecha))) + '</div>' +
+    (esAgenda() ? '<button class="btn sm" id="a-bloquear">Bloquear horario</button>' : '') + '</div>' +
+    '<div id="a-bloqueos"></div><div id="a-lista"><div class="vacio">Cargando…</div></div></div>' +
+    '<aside class="ag-side"><div class="card ag-resumen"><h3>Resumen del día</h3><div class="ag-stats" id="a-stats"></div></div>' +
+    '<div class="card ag-acciones"><h3>Acciones rápidas</h3>' +
+    (puedeAgendar() ? '<button class="btn pri full" id="q-nueva">Nueva cita</button>' : '') +
+    (puedeSinCita() ? '<button class="btn full" id="q-sincita">Registrar atención sin cita</button>' : '') +
+    (puedeConfirmar() ? '<button class="btn full" id="q-conf">Ver confirmaciones</button>' : '') +
+    '</div></aside></div>';
+  if ($('q-nueva')) $('q-nueva').onclick = function () { irA('nueva'); };
+  if ($('q-sincita')) $('q-sincita').onclick = function () { irA('sincita'); };
+  if ($('q-conf')) $('q-conf').onclick = function () { irA('confirmar'); };
+  $('a-ant').onclick = function () { S.fecha = sumarDias(S.fecha, -1); vAgenda(); };
+  $('a-sig').onclick = function () { S.fecha = sumarDias(S.fecha, 1); vAgenda(); };
+  $('a-hoy').onclick = function () { S.fecha = S.hoy; vAgenda(); };
+  $('a-fecha').onchange = function () { if (this.value) { S.fecha = this.value; vAgenda(); } };
+  if ($('f-ter')) {
+    $('f-ter').onchange = function () { S.filtros.terapeuta = this.value; cargarAgenda(); };
+    $('f-ofi').onchange = function () { S.filtros.oficina = this.value; cargarAgenda(); };
+  }
+  if ($('a-bloquear')) $('a-bloquear').onclick = abrirBloqueo;
+  enlazarBuscador();
+  cargarAgenda();
+}
+
+function pintarResumen(lista) {
+  if (!$('a-stats')) return;
+  var canc = lista.filter(function (c) { return c.asistencia === 'Cancelada' || c.confirmacion === 'Canceló'; }).length;
+  var conf = lista.filter(function (c) { return c.confirmacion === 'Confirmó' && c.asistencia !== 'Cancelada'; }).length;
+  var porConf = lista.length - canc - conf;
+  var ico = {
+    check: '<path d="M5 12l5 5L20 7"/>',
+    reloj: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+    x: '<circle cx="12" cy="12" r="8"/><path d="M9 9l6 6M15 9l-6 6"/>',
+    personas: '<path d="M16 19v-1a4 4 0 0 0-8 0v1M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/>'
+  };
+  function ic(k) { return '<span class="ag-ico"><svg viewBox="0 0 24 24" aria-hidden="true">' + ico[k] + '</svg></span>'; }
+  $('a-stats').innerHTML =
+    '<div class="ag-stat verde">' + ic('check') + '<b>' + conf + '</b><span>Confirmadas</span></div>' +
+    '<div class="ag-stat ambar">' + ic('reloj') + '<b>' + porConf + '</b><span>Por confirmar</span></div>' +
+    '<div class="ag-stat rojo">' + ic('x') + '<b>' + canc + '</b><span>Canceladas</span></div>' +
+    '<div class="ag-stat guinda">' + ic('personas') + '<b>' + lista.length + '</b><span>Total de citas</span></div>';
+}
+
+async function cargarAgenda() {
+  var fecha = S.fecha, u = S.perfil;
+  var q = sb.from('citas').select(CITA_SELECT).eq('fecha', fecha)
+    .or('asistencia.is.null,asistencia.neq.Reprogramada').order('hora');
+  if (u.rol === 'terapeuta') q = q.eq('terapeuta_id', u.id);
+  else if (S.filtros.terapeuta) q = q.eq('terapeuta_id', S.filtros.terapeuta);
+  if (S.filtros.oficina) q = q.eq('oficina_id', S.filtros.oficina);
+
+  var bq = sb.from('bloqueos').select('id, terapeuta_id, desde, hasta, hora_desde, hora_hasta, motivo')
+    .eq('activo', true).lte('desde', fecha).gte('hasta', fecha);
+  var res = await q, resB = await bq;
+  if (S.tab !== 'agenda' || fecha !== S.fecha || !$('a-lista')) return;
+
+  if (!resB.error && $('a-bloqueos')) {
+    $('a-bloqueos').innerHTML = (resB.data || []).filter(function (b) {
+      return !b.terapeuta_id || !S.filtros.terapeuta || b.terapeuta_id === S.filtros.terapeuta;
+    }).map(function (b) {
+      var horas = b.hora_desde ? String(b.hora_desde).slice(0, 5) + ' a ' + String(b.hora_hasta).slice(0, 5) : 'Todo el día';
+      return '<div class="bloqueo"><b>Agenda bloqueada: ' + esc(b.motivo || 'sin motivo') + '</b>' + esc(horas) +
+        (esAgenda() ? '<br><button class="link" data-bq="' + esc(b.id) + '">Quitar bloqueo</button>' : '') + '</div>';
+    }).join('');
+    Array.prototype.forEach.call($('a-bloqueos').querySelectorAll('[data-bq]'), function (x) {
+      x.onclick = function () { quitarBloqueo(x.getAttribute('data-bq')); };
+    });
+  }
+
+  var el = $('a-lista');
+  if (res.error) { el.innerHTML = '<div class="vacio">No se pudo cargar la agenda.</div>'; toast(res.error.message, true); return; }
+  S.lista = (res.data || []).map(aCita);
+  pintarResumen(S.lista);
+  if (!S.lista.length) { el.innerHTML = '<div class="vacio">No hay citas este día.</div>'; return; }
+  var activas = S.lista.filter(function (c) { return c.asistencia !== 'Cancelada'; }).length;
+  el.innerHTML = '<p class="nota">' + activas + ' cita(s) activas' +
+    (S.lista.length > activas ? ' · ' + (S.lista.length - activas) + ' cancelada(s)' : '') + '</p>' +
+    S.lista.map(tarjetaCita).join('');
+  enlazarCitas(el);
+}
+
+/* ---------------- Detalle de cita ---------------- */
+function urlWA(c) {
+  var tel = soloDigitos(c.telefono);
+  if (tel.length === 10) tel = '52' + tel;
+  var texto = PLANTILLA_WA
+    .replace(/\{nombre\}/g, String(c.pacienteNombre).trim().split(/\s+/)[0] || '')
+    .replace(/\{dia\}/g, diaLargo(c.fecha))
+    .replace(/\{hora\}/g, c.hora)
+    .replace(/\{oficina\}/g, c.oficina);
+  return 'https://wa.me/' + tel + '?text=' + encodeURIComponent(texto);
+}
+
+function detalle(c) {
+  var u = S.perfil, puede = puedeTocar(c), confirma = esAgenda();
+  var ya = c.fecha < S.hoy || (c.fecha === S.hoy && c.hora <= horaAhora());
+  var cancelada = c.asistencia === 'Cancelada', movida = c.asistencia === 'Reprogramada';
+
+  var h = '<h2>' + esc(c.pacienteNombre) + '</h2>' +
+    '<p class="meta" style="margin-top:-6px">' + esc(cap(diaLargo(c.fecha))) + ' · ' + esc(c.hora) + ' (' + c.duracion + ' min)<br>' +
+    esc(textoTipo(c)) + ' · Oficina ' + esc(c.oficina) + ' · ' + esc(c.terapeuta) + '<br>Usuario ' + esc(c.pacienteNumero) + ' · Cita ' + esc(c.numero) +
+    (c.tipo === 'Primer contacto'
+      ? '<br>Supo del IMCA por: ' + (c.comoSupo ? esc(c.comoSupo.replace(/ \(especificar\)$/, '')) + (c.comoSupoDetalle ? ' · ' + esc(c.comoSupoDetalle) : '') : '<i>sin dato</i>')
+      : '') + '</p>' +
+    '<div class="chips">' + chipConf(c.confirmacion) + chipAsist(c) + (c.motivo && !cancelada ? '<span class="chip">' + esc(c.motivo) + '</span>' : '') + '</div>' +
+    '<div id="d-hist"></div>';
+
+  if (c.telefono) {
+    if (puede) h += '<div class="acciones" style="margin-top:12px">' +
+      (confirma ? '<a class="btn wa" target="_blank" rel="noopener" href="' + esc(urlWA(c)) + '">WhatsApp de confirmación</a>' : '') +
+      '<a class="btn" href="tel:' + esc(c.telefono) + '">Llamar</a></div>';
+  } else {
+    h += '<div class="aviso-tel">Este usuario no tiene teléfono registrado.</div>';
+  }
+  if (confirma) h += '<button class="link" id="d-editar">' + (c.telefono ? 'Editar nombre o teléfono del usuario' : 'Agregar teléfono del usuario') + '</button>';
+  if (confirma && !movida && !cancelada) h += '<div style="margin-top:8px"><button class="btn sm" id="d-editar-cita">Editar cita</button></div>';
+
+  if (puede && !movida) {
+    if (confirma) h += '<h3>Confirmación</h3><div class="seg" id="d-conf">' +
+      CONFIRMACION.map(function (v) { return '<button data-v="' + esc(v) + '"' + (c.confirmacion === v ? ' class="on"' : '') + '>' + esc(v) + '</button>'; }).join('') + '</div>';
+    if (!ya && !c.asistencia) h += '<p class="nota">La asistencia se podrá marcar a partir de las ' + esc(c.hora) + '.</p>';
+    if (ya && !cancelada) h += '<h3>Asistencia</h3><div class="acciones">' +
+      '<button class="btn ok" id="d-llego">Llegó</button><button class="btn bad" id="d-nollego">No llegó</button></div>' +
+      '<label for="d-motivo">Motivo si no llegó</label><select id="d-motivo">' +
+      MOTIVOS.map(function (m) { return '<option' + (c.motivo === m ? ' selected' : '') + '>' + esc(m) + '</option>'; }).join('') + '</select>';
+    h += '<h3>Notas</h3><textarea id="d-obs" placeholder="Comentarios de la cita">' + esc(c.observaciones) + '</textarea>' +
+      '<button class="btn sm" id="d-obs-g" style="margin-top:6px">Guardar notas</button>';
+    if (confirma && c.asistencia !== 'Llegó') h += '<h3>Reprogramar</h3>' +
+      '<div class="fila"><div><label for="r-fecha">Nueva fecha</label><input type="date" id="r-fecha" min="' + S.hoy + '"></div>' +
+      '<div><label for="r-hora">Hora</label><select id="r-hora"><option value="">Elige fecha</option></select></div></div>' +
+      '<label for="r-ter">Terapeuta</label><select id="r-ter">' +
+      S.terapeutas.map(function (t) { return '<option value="' + t.id + '"' + (t.id === c.terapeutaId ? ' selected' : '') + '>' + esc(t.nombre) + '</option>'; }).join('') +
+      '</select><button class="btn full" id="r-ir">Reprogramar cita</button>';
+  }
+
+  if (u.rol === 'admin') h += '<button class="btn bad full" id="d-borrar">Borrar cita</button>';
+
+  if (u.rol !== 'consulta') h += '<h3>Documentos del usuario</h3><p class="nota" style="margin-top:-4px">Oficios de canalización (escuela, fiscalía, juzgado cívico…).</p>' +
+    '<div id="d-docs"><p class="nota">Cargando…</p></div>' +
+    (puede ? '<label class="btn sm adjuntar">Adjuntar foto o PDF<input type="file" id="d-archivo" accept="image/*,application/pdf"></label>' : '');
+
+  abrirModal(h);
+  historialDe(c.pacienteId).then(function (hi) { if ($('d-hist')) $('d-hist').innerHTML = avisoHistorial(hi); });
+  if (u.rol !== 'consulta') cargarDocs(c);
+
+  if ($('d-editar')) $('d-editar').onclick = function () { editarUsuario(c); };
+  if ($('d-editar-cita')) $('d-editar-cita').onclick = function () { editarCitaForm(c); };
+  if ($('d-borrar')) $('d-borrar').onclick = function () { borrarCita(c); };
+  if ($('d-archivo')) $('d-archivo').onchange = function () { if (this.files[0]) subirDoc(c, this.files[0]); this.value = ''; };
+  if ($('d-conf')) Array.prototype.forEach.call($('d-conf').querySelectorAll('button'), function (b) {
+    b.onclick = function () { cambiarConfirmacion(c, b.getAttribute('data-v')); };
+  });
+  if ($('d-llego')) {
+    $('d-llego').onclick = function () { marcarAsistencia(c, 'Llegó'); };
+    $('d-nollego').onclick = function () { marcarAsistencia(c, 'No llegó'); };
+  }
+  if ($('d-obs-g')) $('d-obs-g').onclick = function () { guardarNotas(c, $('d-obs').value); };
+  if ($('r-ir')) {
+    var rf = $('r-fecha'), rh = $('r-hora'), rt = $('r-ter');
+    rf.onchange = function () { llenarHoras(rh, rt.value, rf.value, c.id); };
+    rt.onchange = function () { llenarHoras(rh, rt.value, rf.value, c.id); };
+    $('r-ir').onclick = function () { reprogramar(c, rf.value, rh.value, rt.value); };
+  }
+}
+
+async function refrescarDetalle(id) {
+  if (S.tab === 'agenda') { await cargarAgenda(); if (S.paciente) await mostrarCitasDePaciente(S.paciente); }
+  var c = await leerCita(id);
+  if (c) detalle(c); else cerrarModal();
+}
+
+async function cambiarConfirmacion(c, v) {
+  if (v === 'Canceló' && !confirm('¿Marcar la cita como cancelada? Se libera el espacio y se quita de Google Calendar.')) return;
+  var cambio = { confirmacion: v };
+  var nuevo = Object.assign({}, c, { confirmacion: v });
+  if (v === 'Canceló') {
+    cambio.asistencia = 'Cancelada'; cambio.motivo = 'Canceló con aviso'; cambio.evento_google = null;
+  } else if (c.asistencia === 'Cancelada') {
+    cambio.asistencia = null; cambio.motivo = null;
+    nuevo.asistencia = null;
+  }
+  var ok = await run(async function () { chk(await sb.from('citas').update(cambio).eq('id', c.id)); return true; });
+  if (!ok) return;
+  bitacora('Confirmación', c.numero + ' ' + v);
+  if (v === 'Canceló') {
+    if (c.eventoId) await conCalendario(calendario('/borrar-evento', { terapeuta_id: c.terapeutaId, evento_id: c.eventoId }));
+  } else {
+    await sincronizarCambio(nuevo);
+  }
+  toast('Guardado');
+  refrescarDetalle(c.id);
+}
+
+async function marcarAsistencia(c, asist) {
+  var motivo = asist === 'No llegó' ? ($('d-motivo') ? $('d-motivo').value : 'No avisó / no llegó') : null;
+  var ok = await run(async function () {
+    chk(await sb.from('citas').update({ asistencia: asist, motivo: motivo }).eq('id', c.id));
+    return true;
+  });
+  if (!ok) return;
+  bitacora('Asistencia', c.numero + ' ' + asist + (motivo ? ' (' + motivo + ')' : ''));
+  await sincronizarCambio(Object.assign({}, c, { asistencia: asist }));
+  toast(asist === 'Llegó' ? 'Marcado: llegó' : 'Marcado: no llegó');
+  refrescarDetalle(c.id);
+}
+
+async function guardarNotas(c, texto) {
+  var notas = String(texto || '').slice(0, 500);
+  var ok = await run(async function () { chk(await sb.from('citas').update({ observaciones: notas }).eq('id', c.id)); return true; });
+  if (!ok) return;
+  await sincronizarCambio(Object.assign({}, c, { observaciones: notas }));
+  toast('Notas guardadas');
+  refrescarDetalle(c.id);
+}
+
+// Reprogramar crea una cita nueva ligada a la anterior y deja la anterior como "Reprogramada".
+async function reprogramar(c, fecha, hora, terId) {
+  if (!fecha || !hora) return toast('Elige fecha y hora nuevas.', true);
+  if (fecha < S.hoy) return toast('No se puede reprogramar a una fecha pasada.', true);
+  if (fecha === S.hoy && hora <= horaAhora()) return toast('Esa hora ya pasó. Elige otra.', true);
+  var ocupada = await run(function () { return horasOcupadas(terId, fecha, c.id); });
+  if (!ocupada) return;
+  if (ocupada[hora.slice(0, 2)]) return toast('Esa hora no está disponible. Elige otra.', true);
+  var dup = await run(function () { return citaDelDia(c.pacienteId, fecha, c.id); });
+  if (dup) return toast('Este usuario ya tiene cita ese día a las ' + dup.hora + '. Elige otra fecha.', true);
+
+  var nueva = await run(async function () {
+    return chk(await sb.from('citas').insert({
+      paciente_id: c.pacienteId, terapeuta_id: terId, oficina_id: c.oficinaId,
+      fecha: fecha, hora: hora, duracion: DURACION, tipo: c.tipo, origen: c.origen,
+      como_supo: c.comoSupo, como_supo_detalle: c.comoSupoDetalle, num_seguimiento: c.numSeguimiento,
+      observaciones: c.observaciones || null, agendo: S.perfil.id, reprogramada_de: c.id,
+      confirmacion: 'Por confirmar'
+    }).select(CITA_SELECT).single());
+  });
+  if (!nueva) return;
+
+  var marcada = await run(async function () {
+    chk(await sb.from('citas').update({ asistencia: 'Reprogramada', motivo: 'Reprogramó', evento_google: null }).eq('id', c.id));
+    return true;
+  });
+  if (!marcada) return;
+
+  bitacora('Reprogramó', c.numero + ' a ' + fecha + ' ' + hora);
+  if (c.eventoId) await conCalendario(calendario('/borrar-evento', { terapeuta_id: c.terapeutaId, evento_id: c.eventoId }));
+  await sincronizarNuevaCita(aCita(nueva));
+  toast('Cita reprogramada');
+  cerrarModal();
+  S.fecha = fecha;
+  irA('agenda');
+}
+
+function editarUsuario(c) {
+  abrirModal('<h2>Datos del usuario</h2><p class="nota" style="margin-top:-6px">Usuario ' + esc(c.pacienteNumero) + '</p>' +
+    '<label for="e-nom">Nombre completo</label><input id="e-nom" value="' + esc(c.pacienteNombre) + '">' +
+    '<label for="e-tel">Teléfono (10 dígitos)</label><input id="e-tel" inputmode="tel" maxlength="14" value="' + esc(c.telefono) + '">' +
+    '<button class="btn pri full" id="e-ok">Guardar</button><button class="btn full" id="e-cancel">Cancelar</button>');
+  $('e-cancel').onclick = function () { refrescarDetalle(c.id); };
+  $('e-ok').onclick = async function () {
+    var nom = $('e-nom').value.trim(), tel = soloDigitos($('e-tel').value);
+    if (!nom) return toast('Escribe el nombre.', true);
+    if (tel && tel.length !== 10) return toast('El teléfono debe tener 10 dígitos.', true);
+    var ok = await run(async function () {
+      chk(await sb.from('pacientes').update({ nombre: nom, telefono: tel || null }).eq('id', c.pacienteId));
+      return true;
+    });
+    if (!ok) return;
+    bitacora('Editó usuario', c.pacienteNumero);
+    toast('Datos guardados');
+    refrescarDetalle(c.id);
+  };
+}
+
+/* ---------------- Editar y borrar cita (agenda y admin editan; solo admin borra) ---------------- */
+function opcionesSupo(valor) {
+  return '<option value="">Selecciona una opción…</option>' + COMO_SUPO.map(function (o) {
+    return '<option value="' + esc(o) + '"' + (o === valor ? ' selected' : '') + '>' + esc(o.replace(/ \(especificar\)$/, '')) + (/\(especificar\)$/.test(o) ? ' (escribir cuál)' : '') + '</option>';
+  }).join('');
+}
+
+function editarCitaForm(c) {
+  var esPrimer = c.tipo === 'Primer contacto';
+  abrirModal('<h2>Editar cita</h2><p class="nota" style="margin-top:-6px">' + esc(c.pacienteNombre) + ' · ' + esc(c.numero) +
+    '. Corrige los datos de esta misma cita. Si el usuario pidió otra fecha, usa Reprogramar.</p>' +
+    '<label for="e-tipo">Tipo de cita</label><select id="e-tipo"><option' + (esPrimer ? ' selected' : '') + '>Primer contacto</option><option' + (esPrimer ? '' : ' selected') + '>Seguimiento</option></select>' +
+    '<div id="e-seg-box"' + (esPrimer ? ' class="oculto"' : '') + '><label for="e-seg">Número de seguimiento</label><input id="e-seg" inputmode="numeric" maxlength="3" value="' + esc(c.numSeguimiento || '') + '"></div>' +
+    '<div id="e-origen-box"' + (esPrimer ? '' : ' class="oculto"') + '>' +
+      '<label for="e-supo">¿Cómo supo del IMCA?</label><select id="e-supo">' + opcionesSupo(c.comoSupo) + '</select>' +
+      '<div id="e-supo-det-box" class="oculto"><label for="e-supo-det">¿Cuál?</label><input id="e-supo-det" maxlength="120" value="' + esc(c.comoSupoDetalle || '') + '"></div>' +
+      '<label for="e-origen">¿Por dónde pidió la cita?</label><select id="e-origen">' +
+        ORIGENES.map(function (o) { return '<option' + (o === c.origen ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>' +
+    '</div>' +
+    '<label for="e-ter">Terapeuta</label><select id="e-ter">' +
+      S.terapeutas.map(function (t) { return '<option value="' + t.id + '"' + (t.id === c.terapeutaId ? ' selected' : '') + '>' + esc(t.nombre) + '</option>'; }).join('') + '</select>' +
+    '<label for="e-ofi">Oficina</label><select id="e-ofi">' +
+      S.oficinas.map(function (o) { return '<option value="' + o.id + '"' + (o.id === c.oficinaId ? ' selected' : '') + '>' + esc(o.nombre) + '</option>'; }).join('') + '</select>' +
+    '<div class="fila"><div><label for="e-fecha">Fecha</label><input type="date" id="e-fecha" value="' + esc(c.fecha) + '"></div>' +
+    '<div><label for="e-hora">Hora</label><select id="e-hora"></select></div></div>' +
+    '<button class="btn pri full" id="e-guardar">Guardar cambios</button><button class="btn full" id="e-cancelar">Cancelar</button>');
+
+  llenarHoras($('e-hora'), c.terapeutaId, c.fecha, c.id).then(function () { $('e-hora').value = c.hora; });
+  $('e-tipo').onchange = function () {
+    var primer = this.value === 'Primer contacto';
+    $('e-seg-box').classList.toggle('oculto', primer);
+    $('e-origen-box').classList.toggle('oculto', !primer);
+  };
+  var pideDetalle = function () { $('e-supo-det-box').classList.toggle('oculto', !/\(especificar\)$/.test($('e-supo').value)); };
+  $('e-supo').onchange = function () { $('e-supo-det').value = ''; pideDetalle(); };
+  pideDetalle();
+  var horasEdit = function () { llenarHoras($('e-hora'), $('e-ter').value, $('e-fecha').value, c.id); };
+  $('e-ter').onchange = horasEdit;
+  $('e-fecha').onchange = horasEdit;
+  $('e-cancelar').onclick = function () { refrescarDetalle(c.id); };
+  $('e-guardar').onclick = function () { guardarEdicion(c); };
+}
+
+async function guardarEdicion(c) {
+  var tipo = $('e-tipo').value, fecha = $('e-fecha').value, hora = $('e-hora').value;
+  var terId = $('e-ter').value, ofiId = $('e-ofi').value;
+  if (!fecha || !hora) return toast('Elige fecha y hora.', true);
+  var cambioHorario = fecha !== c.fecha || hora !== c.hora || terId !== c.terapeutaId;
+  if (cambioHorario && fecha < S.hoy) return toast('No se puede pasar la cita a una fecha pasada.', true);
+  if (!ofiId) return toast('Elige la oficina.', true);
+
+  var cambio = { tipo: tipo, fecha: fecha, hora: hora, terapeuta_id: terId, oficina_id: ofiId };
+  if (tipo === 'Primer contacto') {
+    var supo = $('e-supo').value;
+    if (!supo) { $('e-supo').focus(); return toast('Falta llenar "¿Cómo supo del IMCA?". Es obligatorio en primer contacto.', true); }
+    var det = $('e-supo-det').value.trim(), pideDet = /\(especificar\)$/.test(supo);
+    if (pideDet && det.length < 2) { $('e-supo-det').focus(); return toast('Escribe cuál en "¿Cómo supo del IMCA?".', true); }
+    cambio.como_supo = supo;
+    cambio.como_supo_detalle = pideDet ? det : null;
+    cambio.origen = $('e-origen').value;
+    cambio.num_seguimiento = null;
+  } else {
+    var seg = parseInt($('e-seg').value, 10);
+    if (!(seg >= 1 && seg <= 999)) return toast('Escribe el número de seguimiento.', true);
+    cambio.num_seguimiento = seg;
+    cambio.como_supo = null; cambio.como_supo_detalle = null; cambio.origen = null;
+  }
+
+  if (cambioHorario) {
+    var ocupada = await run(function () { return horasOcupadas(terId, fecha, c.id); });
+    if (!ocupada) return;
+    if (ocupada[hora.slice(0, 2)]) return toast(ocupada[hora.slice(0, 2)] === 'ocupada' ? 'Esa terapeuta ya tiene cita a esa hora. Elige otra.' : 'Esa hora está bloqueada en la agenda.', true);
+  }
+
+  var ok = await run(async function () { chk(await sb.from('citas').update(cambio).eq('id', c.id)); return true; });
+  if (!ok) return;
+  bitacora('Editó cita', c.numero + ' ' + fecha + ' ' + hora);
+
+  var nuevo = Object.assign({}, c, {
+    tipo: tipo, fecha: fecha, hora: hora, terapeutaId: terId, oficinaId: ofiId,
+    terapeuta: (S.terapeutas.filter(function (t) { return t.id === terId; })[0] || {}).nombre || c.terapeuta,
+    oficina: (S.oficinas.filter(function (o) { return o.id === ofiId; })[0] || {}).nombre || c.oficina,
+    numSeguimiento: cambio.num_seguimiento || null,
+    comoSupo: cambio.como_supo || null, comoSupoDetalle: cambio.como_supo_detalle || null, origen: cambio.origen || null
+  });
+
+  // Google Calendar: si cambió de terapeuta, fecha u hora, el evento se mueve; si no, solo se actualiza.
+  if (!c.eventoId || cambioHorario) {
+    if (c.eventoId) await conCalendario(calendario('/borrar-evento', { terapeuta_id: c.terapeutaId, evento_id: c.eventoId }));
+    await sincronizarNuevaCita(nuevo);
+  } else {
+    await sincronizarCambio(nuevo);
+  }
+
+  toast('Cita actualizada');
+  S.fecha = fecha;
+  if (S.tab === 'agenda') vAgenda();
+  var actualizada = await leerCita(c.id);
+  if (actualizada) detalle(actualizada);
+}
+
+async function borrarCita(c) {
+  if (!confirm('¿Borrar la cita de ' + c.pacienteNombre + ' del ' + diaLargo(c.fecha) + ' a las ' + c.hora + '? Se quita también de Google Calendar y no se puede deshacer.')) return;
+  var ok = await run(async function () { chk(await sb.from('citas').delete().eq('id', c.id)); return true; });
+  if (!ok) return;
+  bitacora('Borró cita', c.numero + ' ' + c.fecha + ' ' + c.hora + ' ' + c.pacienteNombre);
+  if (c.eventoId) await conCalendario(calendario('/borrar-evento', { terapeuta_id: c.terapeutaId, evento_id: c.eventoId }));
+  toast('Cita borrada');
+  cerrarModal();
+  if (S.tab === 'agenda') { cargarAgenda(); if (S.paciente) mostrarCitasDePaciente(S.paciente); }
+}
+
+/* ---------------- Documentos ---------------- */
+async function cargarDocs(c) {
+  var el = $('d-docs');
+  var res = await sb.from('adjuntos').select('id, nombre, ruta, creado').eq('paciente_id', c.pacienteId).eq('activo', true).order('creado', { ascending: false });
+  if (!el) return;
+  if (res.error) { el.innerHTML = '<p class="nota">No se pudieron cargar los documentos.</p>'; return; }
+  var lista = res.data || [];
+  if (!lista.length) { el.innerHTML = '<p class="nota">No hay documentos todavía.</p>'; return; }
+  el.innerHTML = lista.map(function (a) {
+    return '<div class="card" style="padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+      '<div style="min-width:0"><b style="word-break:break-word">' + esc(a.nombre) + '</b><small class="nota" style="display:block;margin:0">' + esc(diaCorto(String(a.creado).slice(0, 10))) + '</small></div>' +
+      '<div class="acciones" style="margin:0"><button class="btn sm" data-ver="' + esc(a.ruta) + '">Ver</button>' +
+      (esAgenda() ? '<button class="btn sm bad" data-quitar="' + esc(a.id) + '">Quitar</button>' : '') + '</div></div>';
+  }).join('');
+  Array.prototype.forEach.call(el.querySelectorAll('[data-ver]'), function (b) {
+    b.onclick = function () { verDoc(b.getAttribute('data-ver')); };
+  });
+  Array.prototype.forEach.call(el.querySelectorAll('[data-quitar]'), function (b) {
+    b.onclick = async function () {
+      if (!confirm('¿Quitar este documento de la lista del usuario?')) return;
+      var ok = await run(async function () { chk(await sb.from('adjuntos').update({ activo: false }).eq('id', b.getAttribute('data-quitar'))); return true; });
+      if (ok) { toast('Documento quitado'); cargarDocs(c); }
+    };
+  });
+}
+
+async function verDoc(ruta) {
+  var ventana = window.open('', '_blank');   // se abre antes para que el celular no lo bloquee
+  var r = await sb.storage.from('oficios').createSignedUrl(ruta, 300);
+  if (r.error || !r.data) { if (ventana) ventana.close(); return toast('No se pudo abrir el documento.', true); }
+  if (ventana) ventana.location = r.data.signedUrl; else window.location = r.data.signedUrl;
+}
+
+async function subirDoc(c, file) {
+  if (file.size > MAX_ADJ_MB * 1024 * 1024) return toast('El archivo pasa de ' + MAX_ADJ_MB + ' MB.', true);
+  var nombreSeguro = file.name.replace(/[^\w.\- ]/g, '_');
+  var ruta = c.pacienteId + '/' + (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now()) + '-' + nombreSeguro;
+  var ok = await run(async function () {
+    chk(await sb.storage.from('oficios').upload(ruta, file, { contentType: file.type, upsert: false }));
+    chk(await sb.from('adjuntos').insert({
+      paciente_id: c.pacienteId, cita_id: c.id, ruta: ruta, nombre: file.name,
+      tipo: file.type, subio_por: S.perfil.id
+    }));
+    return true;
+  });
+  if (!ok) return;
+  bitacora('Adjuntó documento', c.numero + ' ' + file.name);
+  toast('Documento guardado');
+  cargarDocs(c);
+}
+
+/* ---------------- Vista: Buscar ---------------- */
+// Buscador de la agenda: escribe nombre o teléfono y aparecen las citas del usuario.
+function enlazarBuscador() {
+  S.paciente = null;
+  var t;
+  $('b-q').oninput = function () {
+    var q = this.value.trim();
+    clearTimeout(t);
+    if (q.length < 3) { $('b-res').innerHTML = ''; return; }
+    t = setTimeout(async function () {
+      var lista = await buscarPacientes(q);
+      if (!$('b-res')) return;
+      if (!lista.length) { $('b-res').innerHTML = '<div class="card"><p class="nota">No hay usuarios con "' + esc(q) + '".</p></div>'; return; }
+      $('b-res').innerHTML = '<div class="resultados">' + lista.map(function (p, i) {
+        return '<button data-i="' + i + '"><b>' + esc(p.nombre) + '</b><br><small>' + esc(p.numero) + (p.telefono ? ' · ' + esc(p.telefono) : '') + (p.edad ? ' · ' + esc(p.edad) + ' años' : '') + '</small></button>';
+      }).join('') + '</div>';
+      Array.prototype.forEach.call($('b-res').querySelectorAll('[data-i]'), function (b) {
+        b.onclick = function () { S.paciente = lista[+b.getAttribute('data-i')]; mostrarCitasDePaciente(S.paciente); };
+      });
+    }, 350);
+  };
+}
+
+async function mostrarCitasDePaciente(p) {
+  var res = await run(function () {
+    return sb.from('citas').select(CITA_SELECT).eq('paciente_id', p.id).order('fecha', { ascending: false }).limit(30).then(function (r) { return chk(r) || []; });
+  });
+  if (!res || !$('b-res')) return;
+  S.lista = res.map(aCita);
+  var h = await historialDe(p.id);
+  $('b-res').innerHTML =
+    '<div class="card"><b>' + esc(p.nombre) + '</b> <small class="nota">' + esc(p.numero) + '</small>' +
+    (p.telefono ? '<div class="meta" style="color:var(--muted);font-size:13px">' + esc(p.telefono) + '</div>' : '<div class="aviso-tel">Este usuario no tiene teléfono registrado.</div>') +
+    avisoHistorial(h) + '</div>' +
+    (S.lista.length ? S.lista.map(tarjetaCita).join('') : '<div class="vacio">Sin citas registradas.</div>');
+  enlazarCitas($('b-res'));
+}
+
+/* ---------------- Pendientes de asistencia (cada terapeuta marca las suyas) ---------------- */
+async function pendientesDe() {
+  var q = sb.from('citas').select(CITA_SELECT).is('asistencia', null)
+    .gte('fecha', sumarDias(S.hoy, -30)).lte('fecha', S.hoy)
+    .order('fecha', { ascending: false }).order('hora', { ascending: false });
+  if (S.perfil.rol === 'terapeuta') q = q.eq('terapeuta_id', S.perfil.id);
+  var res = await q;
+  if (res.error) return [];
+  var ahora = horaAhora();
+  return (res.data || []).map(aCita).filter(function (c) { return c.fecha < S.hoy || c.hora <= ahora; });
+}
+
+async function actualizarBadge() {
+  var n = (await pendientesDe()).length;
+  var b = $('badge-pend');
+  if (!b) return;
+  b.textContent = n > 99 ? '99+' : String(n);
+  b.classList.toggle('oculto', !n);
+}
+
+function refrescarVista() {
+  if (S.tab === 'pendientes') vPendientes();
+  else if (S.tab === 'confirmar') cargarConfirmar();
+  else if (S.tab === 'agenda') cargarAgenda();
+  actualizarBadge();
+}
+
+async function marcarRapido(c, asist, motivo) {
+  var ok = await run(async function () {
+    chk(await sb.from('citas').update({ asistencia: asist, motivo: motivo }).eq('id', c.id));
+    return true;
+  });
+  if (!ok) return;
+  bitacora('Asistencia', c.numero + ' ' + asist + (motivo ? ' (' + motivo + ')' : ''));
+  await sincronizarCambio(Object.assign({}, c, { asistencia: asist }));
+  toast(asist === 'Llegó' ? 'Marcado: llegó' : 'Marcado: no llegó');
+  refrescarVista();
+}
+
+function tarjetaPendiente(c) {
+  var puede = puedeMarcar(c);
+  return '<div class="cita" style="cursor:default">' +
+    '<div class="hora">' + esc(c.hora) + '<small>' + c.duracion + ' min</small></div>' +
+    '<div class="info"><div class="nombre">' + esc(c.pacienteNombre) + '</div>' +
+    '<div class="meta">' + esc(textoTipo(c)) + ' · Of. ' + esc(c.oficina) + (S.perfil.rol !== 'terapeuta' ? ' · ' + esc(c.terapeuta) : '') + '</div>' +
+    (puede ? '<div class="acciones"><button class="btn sm ok" data-id="' + esc(c.id) + '" data-asist="Llegó">Llegó</button>' +
+      '<button class="btn sm bad" data-id="' + esc(c.id) + '" data-asist="No llegó">No llegó</button></div>' : '') +
+    '</div></div>';
+}
+
+async function vPendientes() {
+  $('contenido').innerHTML = '<h2>Asistencia por marcar</h2>' +
+    '<p class="nota" style="margin-top:-6px">Citas que ya pasaron y todavía no tienen registrado si el usuario llegó. ' +
+    (S.perfil.rol === 'terapeuta' ? 'Marca cada cita al terminarla.' : 'Cada terapeuta marca las suyas al terminar su cita. Aquí puedes ver quién falta por marcar.') + '</p>' +
+    '<div id="p-lista"><div class="vacio">Cargando…</div></div>';
+  var lista = await run(pendientesDe);
+  if (S.tab !== 'pendientes' || !$('p-lista')) return;
+  if (!lista) { $('p-lista').innerHTML = '<div class="vacio">No se pudo cargar.</div>'; return; }
+  S.lista = lista;
+  if (!lista.length) { $('p-lista').innerHTML = '<div class="vacio">No hay citas pendientes de marcar.</div>'; return; }
+  var html = '', dia = '';
+  lista.forEach(function (c) {
+    if (c.fecha !== dia) { dia = c.fecha; html += '<h3>' + esc(diaLargo(dia)) + '</h3>'; }
+    html += tarjetaPendiente(c);
+  });
+  $('p-lista').innerHTML = html;
+  Array.prototype.forEach.call($('p-lista').querySelectorAll('[data-asist]'), function (b) {
+    b.onclick = function () {
+      var c = S.lista.filter(function (x) { return x.id === b.getAttribute('data-id'); })[0];
+      var asist = b.getAttribute('data-asist');
+      if (c) marcarRapido(c, asist, asist === 'No llegó' ? 'No avisó / no llegó' : null);
+    };
+  });
+}
+
+/* ---------------- Confirmaciones (agenda) ---------------- */
+function vConfirmar() {
+  if (!puedeConfirmar()) return irA('agenda');
+  if (!S.conf) S.conf = { fecha: sumarDias(S.hoy, 1), filtro: 'Por confirmar' };
+  $('contenido').innerHTML =
+    '<h2>Confirmaciones</h2>' +
+    '<div class="barra-fecha"><button class="btn" id="c-ant" aria-label="Día anterior">‹</button>' +
+    '<input type="date" id="c-fecha" value="' + S.conf.fecha + '"><button class="btn" id="c-sig" aria-label="Día siguiente">›</button></div>' +
+    '<div class="seg" style="margin-bottom:10px" id="c-filtro">' +
+      ['Por confirmar', 'Todas', 'Sin teléfono'].map(function (f) {
+        return '<button data-v="' + f + '"' + (S.conf.filtro === f ? ' class="on"' : '') + '>' + f + '</button>';
+      }).join('') + '</div>' +
+    '<div id="c-resumen"></div><div id="c-lista"><div class="vacio">Cargando…</div></div>';
+  $('c-ant').onclick = function () { S.conf.fecha = sumarDias(S.conf.fecha, -1); vConfirmar(); };
+  $('c-sig').onclick = function () { S.conf.fecha = sumarDias(S.conf.fecha, 1); vConfirmar(); };
+  $('c-fecha').onchange = function () { if (this.value) { S.conf.fecha = this.value; vConfirmar(); } };
+  Array.prototype.forEach.call($('c-filtro').querySelectorAll('button'), function (b) {
+    b.onclick = function () { S.conf.filtro = b.getAttribute('data-v'); vConfirmar(); };
+  });
+  cargarConfirmar();
+}
+
+function tarjetaConfirmar(c) {
+  var id = esc(c.id);
+  var botones = (c.telefono ? '<a class="btn sm wa" target="_blank" rel="noopener" href="' + esc(urlWA(c)) + '">WhatsApp</a>' : '') +
+    CONF_BOTONES.map(function (b) {
+      return '<button class="btn sm' + (b.cls ? ' ' + b.cls : '') + '" data-id="' + id + '" data-conf="' + esc(b.v) + '">' + esc(b.txt) + '</button>';
+    }).join('');
+  return '<div class="cita" style="display:block;cursor:default">' +
+    '<div style="display:flex;gap:12px"><div class="hora">' + esc(c.hora) + '<small>' + c.duracion + ' min</small></div>' +
+    '<div class="info"><div class="nombre">' + esc(c.pacienteNombre) + '</div>' +
+    '<div class="meta">' + esc(textoTipo(c)) + ' · Of. ' + esc(c.oficina) + ' · ' + esc(c.terapeuta) + '</div>' +
+    '<div class="chips">' + chipConf(c.confirmacion) + (c.asistencia === 'Cancelada' ? '<span class="chip bad">Cancelada</span>' : '') +
+      (c.telefono ? '' : '<span class="chip warn">Sin teléfono</span>') + '</div></div></div>' +
+    (c.asistencia === 'Cancelada' ? '' : '<div class="acciones">' + botones + '</div>') + '</div>';
+}
+
+async function cargarConfirmar() {
+  if (S.tab !== 'confirmar' || !$('c-lista')) return;
+  var res = await sb.from('citas').select(CITA_SELECT).eq('fecha', S.conf.fecha)
+    .or('asistencia.is.null,asistencia.neq.Reprogramada').order('hora');
+  if (S.tab !== 'confirmar' || !$('c-lista')) return;
+  if (res.error) { $('c-lista').innerHTML = '<div class="vacio">No se pudo cargar.</div>'; return; }
+  var todas = (res.data || []).map(aCita);
+  S.lista = todas;
+  var cuenta = { 'Por confirmar': 0, 'Confirmó': 0, 'Canceló': 0, 'Reprogramar': 0 };
+  todas.forEach(function (c) {
+    if (c.asistencia === 'Cancelada') cuenta['Canceló']++;
+    else if (cuenta[c.confirmacion] !== undefined) cuenta[c.confirmacion]++;
+  });
+  $('c-resumen').innerHTML = '<div class="chips" style="margin:0 0 10px">' +
+    '<span class="chip">Por confirmar: ' + cuenta['Por confirmar'] + '</span>' +
+    '<span class="chip ok">Confirmó: ' + cuenta['Confirmó'] + '</span>' +
+    '<span class="chip bad">Canceló: ' + cuenta['Canceló'] + '</span>' +
+    '<span class="chip warn">Reprogramar: ' + cuenta['Reprogramar'] + '</span></div>';
+  var visibles = todas.filter(function (c) {
+    if (S.conf.filtro === 'Por confirmar') return c.confirmacion === 'Por confirmar' && c.asistencia !== 'Cancelada';
+    if (S.conf.filtro === 'Sin teléfono') return !c.telefono;
+    return true;
+  });
+  if (!visibles.length) {
+    $('c-lista').innerHTML = '<div class="vacio">' + (todas.length ? 'No hay citas con este filtro.' : 'No hay citas este día.') + '</div>';
+    return;
+  }
+  $('c-lista').innerHTML = visibles.map(tarjetaConfirmar).join('');
+  Array.prototype.forEach.call($('c-lista').querySelectorAll('[data-conf]'), function (b) {
+    b.onclick = function () {
+      var c = S.lista.filter(function (x) { return x.id === b.getAttribute('data-id'); })[0];
+      if (c) confirmarRapido(c, b.getAttribute('data-conf'));
+    };
+  });
+}
+
+async function confirmarRapido(c, v) {
+  if (v === 'Canceló' && !confirm('¿Marcar la cita de ' + c.pacienteNombre + ' como cancelada? Se libera el espacio y se quita de Google Calendar.')) return;
+  var cambio = { confirmacion: v };
+  var nuevo = Object.assign({}, c, { confirmacion: v });
+  if (v === 'Canceló') {
+    cambio.asistencia = 'Cancelada'; cambio.motivo = 'Canceló con aviso'; cambio.evento_google = null;
+  } else if (c.asistencia === 'Cancelada') {
+    cambio.asistencia = null; cambio.motivo = null; nuevo.asistencia = null;
+  }
+  var ok = await run(async function () { chk(await sb.from('citas').update(cambio).eq('id', c.id)); return true; });
+  if (!ok) return;
+  bitacora('Confirmación', c.numero + ' ' + v);
+  if (v === 'Canceló') {
+    if (c.eventoId) await conCalendario(calendario('/borrar-evento', { terapeuta_id: c.terapeutaId, evento_id: c.eventoId }));
+  } else {
+    await sincronizarCambio(nuevo);
+  }
+  toast('Guardado');
+  refrescarVista();
+}
+
+/* ---------------- Bloquear horario ---------------- */
+function abrirBloqueo() {
+  abrirModal('<h2>Bloquear horario</h2><p class="nota" style="margin-top:-6px">Para vacaciones, incapacidades o juntas. Las horas bloqueadas no se pueden agendar.</p>' +
+    '<label for="b-ter">Terapeuta</label><select id="b-ter"><option value="">Todos (toda la agenda)</option>' +
+      S.terapeutas.map(function (t) { return '<option value="' + t.id + '">' + esc(t.nombre) + '</option>'; }).join('') + '</select>' +
+    '<div class="fila"><div><label for="b-desde">Desde</label><input type="date" id="b-desde" value="' + S.fecha + '"></div>' +
+    '<div><label for="b-hasta">Hasta</label><input type="date" id="b-hasta" value="' + S.fecha + '"></div></div>' +
+    '<label style="display:flex;align-items:center;gap:8px;color:var(--ink)"><input type="checkbox" id="b-todo" checked style="width:auto">Todo el día</label>' +
+    '<div id="b-horas" class="oculto"><div class="fila"><div><label for="b-hd">Desde la hora</label><input type="time" id="b-hd" value="08:00"></div>' +
+    '<div><label for="b-hh">Hasta la hora</label><input type="time" id="b-hh" value="18:00"></div></div></div>' +
+    '<label for="b-motivo">Motivo</label><select id="b-motivo"><option>Vacaciones</option><option>Incapacidad</option><option>Junta o capacitación</option><option>Otro</option></select>' +
+    '<label for="b-otro">Detalle (opcional)</label><input id="b-otro" maxlength="120">' +
+    '<button class="btn pri full" id="b-guardar">Bloquear</button><button class="btn full" id="b-cancelar">Cancelar</button>');
+  $('b-todo').onchange = function () { $('b-horas').classList.toggle('oculto', this.checked); };
+  $('b-cancelar').onclick = cerrarModal;
+  $('b-guardar').onclick = guardarBloqueo;
+}
+
+async function guardarBloqueo() {
+  var desde = $('b-desde').value, hasta = $('b-hasta').value, todo = $('b-todo').checked;
+  var hd = $('b-hd').value, hh = $('b-hh').value;
+  if (!desde || !hasta || hasta < desde) return toast('Revisa las fechas.', true);
+  if (!todo && (!hd || !hh || hh <= hd)) return toast('Revisa las horas del bloqueo.', true);
+  var motivo = $('b-motivo').value + ($('b-otro').value.trim() ? ' · ' + $('b-otro').value.trim() : '');
+  var ok = await run(async function () {
+    chk(await sb.from('bloqueos').insert({
+      terapeuta_id: $('b-ter').value || null, desde: desde, hasta: hasta,
+      hora_desde: todo ? null : hd, hora_hasta: todo ? null : hh,
+      motivo: motivo, creado_por: S.perfil.id
+    }));
+    return true;
+  });
+  if (!ok) return;
+  bitacora('Bloqueó horario', desde + ' a ' + hasta + ' ' + motivo);
+  toast('Horario bloqueado');
+  cerrarModal();
+  vAgenda();
+}
+
+async function quitarBloqueo(id) {
+  if (!confirm('¿Quitar este bloqueo? Las horas volverán a estar disponibles.')) return;
+  var ok = await run(async function () { chk(await sb.from('bloqueos').update({ activo: false }).eq('id', id)); return true; });
+  if (!ok) return;
+  bitacora('Quitó bloqueo', id);
+  toast('Bloqueo quitado');
+  cargarAgenda();
+}
+
+/* ---------------- Reportes ---------------- */
+function rangoPeriodo(nombre) {
+  var hoy = aFecha(S.hoy), y = hoy.getFullYear(), m = hoy.getMonth();
+  var desde, hasta = S.hoy;
+  if (nombre === 'Esta semana') desde = sumarDias(S.hoy, -((hoy.getDay() + 6) % 7));
+  else if (nombre === 'Este mes') desde = deFecha(new Date(y, m, 1));
+  else if (nombre === 'Mes pasado') { desde = deFecha(new Date(y, m - 1, 1)); hasta = deFecha(new Date(y, m, 0)); }
+  else if (nombre === 'Últimos 3 meses') desde = deFecha(new Date(y, m - 3, hoy.getDate()));
+  else desde = deFecha(new Date(y, 0, 1));
+  return { desde: desde, hasta: hasta };
+}
+
+function statCard(valor, etiqueta) {
+  return '<div class="stat"><b>' + valor + '</b><small>' + etiqueta + '</small></div>';
+}
+
+function vReportes() {
+  S.rep = S.rep || { periodo: 'Este mes' };
+  var r = rangoPeriodo(S.rep.periodo);
+  $('contenido').innerHTML = '<h2>Estadísticas</h2>' +
+    '<div class="seg" style="margin-bottom:12px" id="r-periodos">' + PERIODOS.map(function (p) {
+      return '<button data-v="' + p + '"' + (S.rep.periodo === p ? ' class="on"' : '') + '>' + p + '</button>';
+    }).join('') + '</div>' +
+    '<div class="fila"><div><label for="r-desde">Desde</label><input type="date" id="r-desde" value="' + r.desde + '"></div>' +
+    '<div><label for="r-hasta">Hasta</label><input type="date" id="r-hasta" value="' + r.hasta + '"></div></div>' +
+    '<button class="btn pri full" id="r-ver">Ver estadísticas</button>' +
+    '<div class="acciones" style="margin-top:8px"><button class="btn sm" id="r-excel">Descargar Excel (CSV)</button><button class="btn sm" id="r-pdf">Imprimir o guardar PDF</button></div>' +
+    '<div id="r-resultado" style="margin-top:14px"></div>';
+  Array.prototype.forEach.call($('r-periodos').querySelectorAll('button'), function (b) {
+    b.onclick = function () { S.rep.periodo = b.getAttribute('data-v'); vReportes(); };
+  });
+  $('r-ver').onclick = cargarReporte;
+  $('r-excel').onclick = descargarCSV;
+  $('r-pdf').onclick = function () { window.print(); };
+  cargarReporte();
+}
+
+async function cargarReporte() {
+  var desde = $('r-desde').value, hasta = $('r-hasta').value;
+  if (!desde || !hasta || hasta < desde) return toast('Revisa las fechas.', true);
+  var box = $('r-resultado');
+  box.innerHTML = '<p class="nota">Cargando…</p>';
+  var q = sb.from('citas').select(CITA_SELECT).gte('fecha', desde).lte('fecha', hasta).order('fecha').order('hora');
+  if (S.perfil.rol === 'terapeuta') q = q.eq('terapeuta_id', S.perfil.id);
+  var res = await run(function () { return q.then(function (r) { return chk(r) || []; }); });
+  if (!res || !$('r-resultado')) { if ($('r-resultado')) box.innerHTML = '<p class="nota">No se pudo cargar.</p>'; return; }
+  var f = res.map(aCita);
+  S.rep.filas = f;
+  var ahora = horaAhora();
+  var llego = f.filter(function (x) { return x.asistencia === 'Llegó'; });
+  var noLlego = f.filter(function (x) { return x.asistencia === 'No llegó' && x.motivo !== 'Canceló con aviso'; });
+  var cancel = f.filter(function (x) { return x.asistencia === 'Cancelada' || (x.asistencia === 'No llegó' && x.motivo === 'Canceló con aviso'); });
+  var sinMarcar = f.filter(function (x) { return !x.asistencia && (x.fecha < S.hoy || (x.fecha === S.hoy && x.hora <= ahora)); });
+  var personas = {};
+  llego.forEach(function (x) { personas[x.pacienteId] = true; });
+  var base = llego.length + noLlego.length;
+  var pct = base ? Math.round(llego.length * 100 / base) + '%' : '—';
+  var primeros = llego.filter(function (x) { return x.tipo === 'Primer contacto'; }).length;
+  var sinCita = llego.filter(function (x) { return x.sinCita; }).length;
+  var grupales = llego.filter(function (x) { return x.modalidad === 'Terapia grupal'; }).length;
+
+  var aviso = (f.length && sinMarcar.length / f.length >= 0.2)
+    ? '<div class="aviso-tel" style="margin-top:10px">' + Math.round(sinMarcar.length * 100 / f.length) +
+      '% de las citas no tienen asistencia marcada; las cifras pueden estar incompletas.</div>' : '';
+  box.innerHTML = aviso +
+    '<div class="grid-stats">' +
+      statCard(pct, 'Asistencia (llegó de las citas marcadas)') +
+      statCard(llego.length, 'Atenciones realizadas') +
+      statCard(Object.keys(personas).length, 'Personas atendidas') +
+      statCard(primeros, 'Primeros contactos') +
+      statCard(noLlego.length, 'Faltas (no llegó sin aviso)') +
+      statCard(cancel.length, 'Cancelaciones') +
+      statCard(sinCita, 'Atenciones sin cita') +
+      statCard(grupales, 'Terapias grupales') +
+    '</div>' +
+    '<p class="nota" style="margin-top:10px">' + f.length + ' citas en el periodo del ' + diaCorto(desde) + ' al ' + diaCorto(hasta) + '.</p>';
+}
+
+function descargarCSV() {
+  var f = S.rep && S.rep.filas ? S.rep.filas : [];
+  if (!f.length) return toast('Primero carga las estadísticas.', true);
+  var cols = ['Fecha', 'Hora', 'Usuario', 'Folio de usuario', 'Folio de cita', 'Tipo', 'Modalidad', 'Sin cita', 'Terapeuta', 'Oficina', 'Confirmación', 'Asistencia', 'Motivo', 'Notas'];
+  var filas = f.map(function (c) {
+    return [c.fecha, c.hora, c.pacienteNombre, c.pacienteNumero, c.numero, textoTipo(c), c.modalidad,
+      c.sinCita ? 'Sí' : 'No', c.terapeuta, c.oficina, c.confirmacion, c.asistencia || 'Sin marcar', c.motivo || '', c.observaciones || ''];
+  });
+  var csv = [cols].concat(filas).map(function (fila) {
+    return fila.map(function (v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }).join(',');
+  }).join('\r\n');
+  var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'agenda-estadisticas-' + S.hoy + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/* ---------------- Vista: Nueva cita ---------------- */
+function marcarSeg(id, v) {
+  Array.prototype.forEach.call($(id).querySelectorAll('button'), function (b) { b.classList.toggle('on', b.getAttribute('data-v') === v); });
+}
+
+// modo: 'nueva' (cita programada) o 'sincita' (atención sin cita, queda como atención realizada)
+function vNueva(modo) {
+  modo = modo || 'nueva';
+  if (modo === 'nueva' && !puedeAgendar()) return irA('agenda');
+  if (modo === 'sincita' && !puedeSinCita()) return irA('agenda');
+  var esSin = modo === 'sincita';
+  S.nueva = { modo: modo, paciente: null, nuevo: false, tipo: 'Primer contacto', confirmadoNuevo: false, modalidad: 'Terapia individual' };
+  $('contenido').innerHTML =
+    '<h2>' + (esSin ? 'Atención sin cita' : 'Nueva cita') + '</h2>' +
+    (esSin ? '<p class="nota" style="margin-top:-6px">Para quien llega sin cita previa y se atiende entre citas. Se registra como atención realizada.</p>' : '') +
+    '<div class="card"><label for="n-buscar">Usuario</label>' +
+      '<div id="n-busqueda"><input id="n-buscar" placeholder="Buscar por nombre, teléfono o número" autocomplete="off"><div id="n-res"></div>' +
+      '<button class="link" id="n-nuevo-btn">+ Registrar usuario nuevo</button></div>' +
+      '<div id="n-sel" class="oculto"></div>' +
+      '<div id="n-nuevo" class="oculto">' +
+        '<label for="n-nom">Nombre completo</label><input id="n-nom" autocomplete="off">' +
+        '<div class="fila"><div><label for="n-tel">Teléfono (10 dígitos)</label><input id="n-tel" inputmode="tel" maxlength="14"></div>' +
+        '<div><label for="n-edad">Edad</label><input id="n-edad" inputmode="numeric" maxlength="3"></div></div>' +
+        '<label for="n-sexo">Sexo</label><select id="n-sexo"><option value="">—</option><option>Mujer</option><option>Hombre</option><option>Otro</option></select>' +
+        '<button class="link" id="n-cancelar-nuevo">Buscar usuario existente</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card"><label>Tipo de cita</label><div class="seg" id="n-tipo">' +
+      '<button data-v="Primer contacto" class="on">Primer contacto</button><button data-v="Seguimiento">Seguimiento</button></div>' +
+      '<div id="n-seg-box" class="oculto"><label for="n-seg">Número de seguimiento</label><input id="n-seg" inputmode="numeric" maxlength="3" value="1">' +
+      '<p class="nota" style="margin:4px 0 0">Se sugiere según los seguimientos anteriores. Puedes corregirlo.</p></div>' +
+      '<label>Modalidad</label><div class="seg" id="n-mod"><button data-v="Terapia individual" class="on">Terapia individual</button><button data-v="Terapia grupal">Terapia grupal</button></div>' +
+      '<label for="n-ter">Terapeuta</label><select id="n-ter"><option value="">Selecciona…</option>' +
+        S.terapeutas.filter(function (t) { return esAgenda() || t.id === S.perfil.id; }).map(function (t) {
+          return '<option value="' + t.id + '"' + (!esAgenda() && t.id === S.perfil.id ? ' selected' : '') + '>' + esc(t.nombre) + '</option>';
+        }).join('') + '</select>' +
+      '<label for="n-ofi">Oficina</label><select id="n-ofi"><option value="">Selecciona…</option>' +
+        S.oficinas.map(function (o) { return '<option value="' + o.id + '">' + esc(o.nombre) + '</option>'; }).join('') + '</select>' +
+      '<div class="fila"><div><label for="n-fecha">Fecha</label><input type="date" id="n-fecha"' + (esSin ? '' : ' min="' + S.hoy + '"') + ' value="' + S.hoy + '"></div>' +
+      (esSin
+        ? '<div><label for="n-hora">Hora en que se atendió</label><input type="time" id="n-hora" value="' + horaAhora() + '"></div></div>'
+        : '<div><label for="n-hora">Hora</label><select id="n-hora"><option value="">Elige terapeuta</option></select></div></div>') +
+      '<div id="n-origen-box">' +
+        '<label for="n-supo">¿Cómo supo del IMCA? <span style="color:var(--bad)">*</span></label>' +
+        '<select id="n-supo"><option value="">Selecciona una opción…</option>' +
+          COMO_SUPO.map(function (o) { return '<option value="' + esc(o) + '">' + esc(o.replace(/ \(especificar\)$/, '')) + (/\(especificar\)$/.test(o) ? ' (escribir cuál)' : '') + '</option>'; }).join('') +
+        '</select>' +
+        '<div id="n-supo-det-box" class="oculto"><label for="n-supo-det">¿Cuál? <span style="color:var(--bad)">*</span></label><input id="n-supo-det" maxlength="120" autocomplete="off"></div>' +
+        '<label for="n-origen">¿Por dónde pidió la cita?</label><select id="n-origen">' +
+          ORIGENES.map(function (o) { return '<option' + (esSin && o === 'Oficina' ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>' +
+      '</div>' +
+      '<label for="n-obs">Notas (opcional)</label><textarea id="n-obs" placeholder="Comentarios de la cita"></textarea>' +
+      '<button class="btn pri full" id="n-guardar">' + (esSin ? 'Registrar atención' : 'Agendar cita') + '</button>' +
+    '</div>';
+
+  var tBus;
+  $('n-buscar').oninput = function () {
+    var q = this.value.trim();
+    clearTimeout(tBus);
+    if (q.length < 2) { $('n-res').innerHTML = ''; return; }
+    tBus = setTimeout(async function () {
+      var lista = await buscarPacientes(q);
+      if (!$('n-res')) return;
+      if (!lista.length) { $('n-res').innerHTML = '<div class="resultados"><button><small>Sin resultados. Regístralo como usuario nuevo.</small></button></div>'; return; }
+      $('n-res').innerHTML = '<div class="resultados">' + lista.map(function (p, i) {
+        return '<button data-i="' + i + '"><b>' + esc(p.nombre) + '</b><br><small>' + esc(p.numero) + (p.telefono ? ' · ' + esc(p.telefono) : '') + (p.edad ? ' · ' + esc(p.edad) + ' años' : '') + '</small></button>';
+      }).join('') + '</div>';
+      Array.prototype.forEach.call($('n-res').querySelectorAll('[data-i]'), function (b) {
+        b.onclick = function () { elegirPaciente(lista[+b.getAttribute('data-i')]); };
+      });
+    }, 350);
+  };
+  $('n-nuevo-btn').onclick = function () {
+    S.nueva.nuevo = true; S.nueva.paciente = null;
+    $('n-busqueda').classList.add('oculto'); $('n-nuevo').classList.remove('oculto');
+    $('n-nom').value = $('n-buscar').value.trim(); $('n-nom').focus();
+  };
+  $('n-cancelar-nuevo').onclick = function () {
+    S.nueva.nuevo = false; S.nueva.confirmadoNuevo = false;
+    $('n-nuevo').classList.add('oculto'); $('n-busqueda').classList.remove('oculto');
+  };
+  Array.prototype.forEach.call($('n-tipo').querySelectorAll('button'), function (b) {
+    b.onclick = function () { S.nueva.tipo = b.getAttribute('data-v'); marcarSeg('n-tipo', S.nueva.tipo); actualizarTipoNueva(); };
+  });
+  Array.prototype.forEach.call($('n-mod').querySelectorAll('button'), function (b) {
+    b.onclick = function () { S.nueva.modalidad = b.getAttribute('data-v'); marcarSeg('n-mod', S.nueva.modalidad); };
+  });
+  $('n-supo').onchange = function () {
+    var pide = /\(especificar\)$/.test(this.value);
+    $('n-supo-det-box').classList.toggle('oculto', !pide);
+    $('n-supo-det').value = '';
+  };
+  if (!esSin) {
+    var horasNueva = function () { llenarHoras($('n-hora'), $('n-ter').value, $('n-fecha').value, null); };
+    $('n-ter').onchange = horasNueva;
+    $('n-fecha').onchange = horasNueva;
+  }
+  $('n-guardar').onclick = guardarNueva;
+  actualizarTipoNueva();
+}
+
+function actualizarTipoNueva() {
+  var seg = S.nueva.tipo === 'Seguimiento';
+  $('n-seg-box').classList.toggle('oculto', !seg);
+  $('n-origen-box').classList.toggle('oculto', seg);
+  if (seg && S.nueva.paciente) sugerirSeguimiento(S.nueva.paciente.id);
+}
+
+async function sugerirSeguimiento(pacienteId) {
+  var res = await sb.from('citas').select('num_seguimiento').eq('paciente_id', pacienteId).not('num_seguimiento', 'is', null);
+  var max = 0;
+  (res.data || []).forEach(function (r) { if (r.num_seguimiento > max) max = r.num_seguimiento; });
+  if (S.nueva && S.nueva.paciente && S.nueva.paciente.id === pacienteId && $('n-seg')) $('n-seg').value = max + 1;
+}
+
+async function elegirPaciente(p) {
+  S.nueva.paciente = p; S.nueva.nuevo = false;
+  $('n-busqueda').classList.add('oculto');
+  $('n-sel').classList.remove('oculto');
+  var h = await historialDe(p.id);
+  $('n-sel').innerHTML = '<div class="seleccion"><div><b>' + esc(p.nombre) + '</b><br><small>' + esc(p.numero) + (p.telefono ? ' · ' + esc(p.telefono) : '') + '</small></div>' +
+    '<button class="link" id="n-cambiar">Cambiar</button></div>' + avisoHistorial(h);
+  $('n-cambiar').onclick = function () {
+    S.nueva.paciente = null;
+    $('n-sel').classList.add('oculto'); $('n-busqueda').classList.remove('oculto');
+  };
+  S.nueva.tipo = 'Seguimiento';
+  marcarSeg('n-tipo', 'Seguimiento');
+  actualizarTipoNueva();
+}
+
+function mostrarParecidos(lista) {
+  $('n-res').innerHTML = '<div class="card" style="margin:8px 0 0"><b>¿Ya está registrado?</b><p class="nota">Encontramos usuarios parecidos. Revisa antes de registrar uno nuevo.</p>' +
+    lista.map(function (p, i) {
+      return '<div class="sim"><b>' + esc(p.nombre) + '</b><br><small>' + esc(p.numero) + (p.telefono ? ' · tel. ' + esc(p.telefono) : '') + (p.edad ? ' · ' + esc(p.edad) + ' años' : '') + '</small>' +
+        '<div><button class="btn sm pri" style="margin-top:6px" data-usar="' + i + '">Es esta persona</button></div></div>';
+    }).join('') +
+    '<button class="btn full" id="n-registrar-igual">Registrar como usuario nuevo de todos modos</button></div>';
+  Array.prototype.forEach.call($('n-res').querySelectorAll('[data-usar]'), function (b) {
+    b.onclick = function () { S.nueva.nuevo = false; $('n-nuevo').classList.add('oculto'); $('n-busqueda').classList.remove('oculto'); elegirPaciente(lista[+b.getAttribute('data-usar')]); };
+  });
+  $('n-registrar-igual').onclick = function () { S.nueva.confirmadoNuevo = true; guardarNueva(); };
+}
+
+async function guardarNueva() {
+  var N = S.nueva;
+  var fecha = $('n-fecha').value, hora = $('n-hora').value, terId = $('n-ter').value, ofiId = $('n-ofi').value;
+  if (!N.paciente && !N.nuevo) return toast('Busca y selecciona al usuario, o regístralo como nuevo.', true);
+  if (N.nuevo && !$('n-nom').value.trim()) return toast('Escribe el nombre completo del usuario.', true);
+  var tel = soloDigitos($('n-tel') ? $('n-tel').value : '');
+  if (N.nuevo && tel && tel.length !== 10) return toast('El teléfono debe tener 10 dígitos.', true);
+  if (!fecha || !hora) return toast('Elige fecha y hora.', true);
+  if (fecha < S.hoy) return toast('No se pueden agendar citas en fechas pasadas.', true);
+  if (N.modo !== 'sincita' && fecha === S.hoy && hora <= horaAhora()) return toast('Esa hora ya pasó. Elige otra.', true);
+  if (!ofiId) return toast('Elige la oficina.', true);
+  if (!terId) return toast('Elige el terapeuta.', true);
+
+  var campos = { origen: null, como_supo: null, como_supo_detalle: null, num_seguimiento: null, modalidad: N.modalidad || 'Terapia individual' };
+  if (N.tipo === 'Primer contacto') {
+    var supo = $('n-supo').value;
+    if (!supo) { $('n-supo').focus(); return toast('Falta llenar "¿Cómo supo del IMCA?". Es obligatorio en primer contacto.', true); }
+    var det = $('n-supo-det').value.trim(), pideDet = /\(especificar\)$/.test(supo);
+    if (pideDet && det.length < 2) { $('n-supo-det').focus(); return toast('Escribe cuál en "¿Cómo supo del IMCA?".', true); }
+    campos.como_supo = supo;
+    campos.como_supo_detalle = pideDet ? det : null;
+    campos.origen = $('n-origen').value;
+  } else {
+    var seg = parseInt($('n-seg').value, 10);
+    if (!(seg >= 1 && seg <= 999)) return toast('Escribe el número de seguimiento.', true);
+    campos.num_seguimiento = seg;
+  }
+
+  // Una atención sin cita puede ocurrir en un horario ocupado; por eso no se revisa la agenda.
+  if (N.modo !== 'sincita') {
+    var ocupada = await run(function () { return horasOcupadas(terId, fecha, null); });
+    if (!ocupada) return;
+    if (ocupada[hora.slice(0, 2)]) return toast(ocupada[hora.slice(0, 2)] === 'ocupada' ? 'Esa terapeuta ya tiene cita a esa hora. Elige otra.' : 'Esa hora está bloqueada en la agenda.', true);
+  }
+
+  if (N.paciente && N.modo !== 'sincita') {
+    var dup = await run(function () { return citaDelDia(N.paciente.id, fecha, null); });
+    if (dup) return toast('Este usuario ya tiene cita ese día a las ' + dup.hora + ' con ' + dup.terapeuta + '. Si necesitas cambiarla, usa Reprogramar.', true);
+  }
+
+  var pacienteId = N.paciente ? N.paciente.id : null;
+  if (!pacienteId) {
+    if (!N.confirmadoNuevo) {
+      var parecidos = await run(function () { return buscarParecidos($('n-nom').value, tel); });
+      if (parecidos && parecidos.length) return mostrarParecidos(parecidos);
+    }
+    var nuevoP = await run(async function () {
+      return chk(await sb.from('pacientes').insert({
+        nombre: $('n-nom').value.trim(), telefono: tel || null,
+        edad: parseInt($('n-edad').value, 10) || null, sexo: $('n-sexo').value || null,
+        origen: campos.origen, creado_por: S.perfil.id
+      }).select('id').single());
+    });
+    if (!nuevoP) return;
+    pacienteId = nuevoP.id;
+  }
+
+  $('n-guardar').disabled = true;
+  var nueva = await run(async function () {
+    var extra = N.modo === 'sincita' ? { asistencia: 'Llegó', confirmacion: 'Confirmó', sin_cita: true } : { sin_cita: false };
+    return chk(await sb.from('citas').insert(Object.assign({
+      paciente_id: pacienteId, terapeuta_id: terId, oficina_id: ofiId, fecha: fecha, hora: hora,
+      duracion: DURACION, tipo: N.tipo, observaciones: $('n-obs').value.trim() || null,
+      agendo: S.perfil.id, confirmacion: 'Por confirmar'
+    }, campos, extra)).select(CITA_SELECT).single());
+  });
+  $('n-guardar').disabled = false;
+  if (!nueva) return;
+
+  var c = aCita(nueva);
+  bitacora(N.modo === 'sincita' ? 'Atención sin cita' : 'Agendó cita', c.numero + ' ' + fecha + ' ' + hora + ' ' + c.terapeuta);
+  if (N.modo === 'sincita') { toast('Atención registrada'); actualizarBadge(); vNueva('sincita'); return; }
+  await sincronizarNuevaCita(c);
+  S.nueva.confirmadoNuevo = false;
+  abrirModal('<h2>Cita agendada</h2><p>' + esc(c.pacienteNombre) + '<br>' + esc(cap(diaLargo(fecha))) + ' · ' + esc(hora) +
+    '<br>Oficina ' + esc(c.oficina) + ' · ' + esc(c.terapeuta) + '</p>' +
+    '<button class="btn pri full" id="ok-otra">Agendar otra</button><button class="btn full" id="ok-ver">Ver en la agenda</button>');
+  $('ok-otra').onclick = function () { cerrarModal(); vNueva(); };
+  $('ok-ver').onclick = function () { cerrarModal(); S.fecha = fecha; irA('agenda'); };
+}
+
+arrancar();
+</script>
+</body>
+</html>

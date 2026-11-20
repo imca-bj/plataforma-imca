@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plataforma IMCA</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; font-family: Manrope, system-ui, sans-serif; font-size: 14px; line-height: 1.6; color: var(--texto); background: var(--fondo); }
+  h1, h2, h3 { font-family: Sora, system-ui, sans-serif; color: var(--titulo); letter-spacing: 0; }
+  button { font: inherit; cursor: pointer; }
+  .oculto { display: none !important; }
+
+  /* Encabezado */
+  header { background: var(--tarjeta); border-bottom: 1px solid var(--linea); box-shadow: none; }
+  .cabecera { max-width: 1120px; margin: auto; min-height: 88px; padding: 20px 28px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .marca { display: flex; align-items: center; gap: 24px; min-width: 0; }
+  .identidad { border-left: 1px solid var(--linea); padding-left: 24px; min-width: 0; }
+  .identidad h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  .identidad small { display: block; font-size: 11px; color: var(--texto); }
+  .salir { border: 1px solid var(--linea); background: var(--tarjeta); color: var(--texto); padding: 8px 16px; border-radius: 8px; font-size: 14px; }
+  .salir:hover { background: var(--gris-suave); }
+
+  main { max-width: 1120px; margin: auto; padding: 48px 28px; }
+
+  /* Inicio de sesión */
+  .tarjeta-login { max-width: 400px; margin: 48px auto; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 8px; padding: 30px; box-shadow: var(--sombra); }
+  .tarjeta-login h2 { margin: 0 0 4px; font-size: 22px; }
+  .sub { margin: 0 0 18px; color: var(--texto); font-size: 14px; }
+  label { display: block; font-size: 13px; color: var(--texto); margin: 12px 0 6px; font-weight: 600; }
+  input { width: 100%; padding: 12px 14px; font-size: 16px; border: 1px solid var(--linea); border-radius: 8px; background: var(--tarjeta); color: var(--titulo); }
+  input:focus { outline: none; border-color: var(--salvia); box-shadow: 0 0 0 3px rgba(107,142,120,.15); }
+  .btn-principal { width: 100%; margin-top: 18px; padding: 14px; font-size: 16px; font-weight: 600; border: 0; border-radius: 8px; color: #fff; background: var(--salvia); box-shadow: none; }
+  .btn-principal:hover { background: var(--salvia-osc); }
+  .error { color: var(--rojo); font-size: 14px; margin-top: 12px; min-height: 18px; }
+
+  /* Menú */
+  .bienvenida { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; }
+  .avatar { width: 56px; height: 56px; border-radius: 8px; background: var(--tarjeta); color: var(--titulo); display: grid; place-items: center; font-weight: 700; font-size: 18px; border: 1px solid var(--linea); flex-shrink: 0; }
+  .bienvenida h2 { margin: 0; font-size: 26px; font-weight: 600; }
+  .chip { display: inline-block; margin-top: 8px; font-size: 11px; background: var(--tarjeta); color: var(--texto); padding: 2px 10px; border: 1px solid var(--linea); border-radius: 8px; text-transform: uppercase; letter-spacing: .6px; }
+  .gcal { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 8px; padding: 16px 20px; margin-bottom: 36px; }
+  .gcal-texto { font-size: 14px; color: var(--titulo); }
+  .gcal-boton { padding: 9px 16px; font-size: 14px; font-weight: 600; border: 1px solid var(--salvia); border-radius: 8px; color: #fff; background: var(--salvia); }
+  .gcal-boton:hover { background: var(--salvia-osc); border-color: var(--salvia-osc); }
+  .seccion-titulo { font-family: Sora, system-ui, sans-serif; font-size: 16px; font-weight: 600; color: var(--titulo); letter-spacing: 0; text-transform: none; margin: 0 0 20px; }
+  #lista-modulos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  .modulo { display: flex; flex-direction: column; gap: 8px; padding: 24px; min-height: 236px; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 8px; box-shadow: var(--sombra); text-decoration: none; color: var(--texto); transition: border-color .15s, box-shadow .15s; }
+  .modulo:hover { border-color: var(--salvia); box-shadow: 0 2px 12px rgba(44,62,80,.08); }
+  .icono { width: 42px; height: 42px; border-radius: 8px; background: var(--gris-suave); color: var(--salvia); display: grid; place-items: center; margin-bottom: 12px; }
+  .icono svg { width: 21px; height: 21px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .modulo strong { font-family: Sora, system-ui, sans-serif; font-size: 16px; font-weight: 600; color: var(--titulo); margin-top: 8px; }
+  .modulo span { font-size: 13px; color: var(--texto); line-height: 1.4; margin-bottom: 16px; }
+  .flecha { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--linea); font-size: 13px; color: var(--salvia); font-weight: 600; }
+  .modulo:hover .flecha { color: var(--salvia-osc); }
+
+  @media (max-width: 850px) {
+    #lista-modulos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .identidad small { display: none; }
+  }
+  @media (max-width: 560px) {
+    .cabecera { padding: 16px 20px; min-height: 72px; gap: 12px; }
+    .identidad { display: none; }
+    main { padding: 32px 20px; }
+    #lista-modulos { grid-template-columns: 1fr; gap: 16px; }
+    .modulo { min-height: 220px; }
+    .avatar { width: 44px; height: 44px; }
+    .salir { padding: 6px 12px; }
+    .bienvenida h2 { font-size: 21px; }
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="imca-caribe.css">
+<link rel="stylesheet" href="imca-agenda.css">
+</head>
+<body>
+
+<header>
+  <div class="cabecera">
+    <div class="marca">
+      <div class="marcas"><img class="logo-institucional" src="img/emblema-sol.png" alt="Gobierno Municipal Benito Juárez"><img class="logo-institucional" src="img/imca-logo.png" alt="IMCA"></div>
+      <div class="identidad">
+        <h1>Plataforma IMCA</h1>
+        <small>Instituto Municipal contra las Adicciones · Benito Juárez</small>
+      </div>
+    </div>
+    <button id="btn-salir" class="salir oculto">Salir</button>
+  </div>
+</header>
+
+<main>
+
+  <section id="pantalla-login" class="tarjeta-login">
+    <h2>Iniciar sesión</h2>
+    <p class="sub">Usa tu correo institucional y tu contraseña.</p>
+    <label for="correo">Correo institucional</label>
+    <input id="correo" type="email" autocomplete="username">
+    <label for="clave">Contraseña</label>
+    <input id="clave" type="password" autocomplete="current-password">
+    <button id="btn-entrar" class="btn-principal">Entrar</button>
+    <div id="error-login" class="error"></div>
+  </section>
+
+  <section id="pantalla-menu" class="oculto">
+    <div class="bienvenida">
+      <div class="avatar" id="iniciales"></div>
+      <div>
+        <h2 id="saludo"></h2>
+        <span class="chip" id="rol"></span>
+      </div>
+    </div>
+    <div id="gcal" class="gcal oculto">
+      <div class="gcal-texto" id="gcal-texto"></div>
+      <button id="gcal-boton" class="gcal-boton"></button>
+    </div>
+    <div class="seccion-titulo">Mis módulos</div>
+    <div id="lista-modulos"></div>
+  </section>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script>
+  const MODULOS = [
+    {
+      nombre: 'Agenda de atención', desc: 'Citas de atención terapéutica',
+      url: 'agenda-atencion.html', roles: ['admin','agenda','coordinacion','terapeuta','consulta'],
+      icono: '<path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/>'
+    },
+    {
+      nombre: 'Reportes', desc: 'Reportes para atender',
+      url: '#reportes', roles: ['admin','coordinacion','operativo','consulta'],
+      icono: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>'
+    },
+    {
+      nombre: 'Agenda operativo', desc: 'Cita y horarios de pláticas y eventos',
+      url: 'agenda-operativo.html', roles: ['admin','coordinacion','operativo','consulta'],
+      icono: '<path d="M4 5h16v11H9l-5 4z"/>'
+    },
+    {
+      nombre: 'Vacaciones', desc: 'Reportes de vacaciones, faltas y permisos',
+      url: '#vacaciones', roles: ['admin','coordinacion'],
+      icono: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'
+    },
+    {
+      nombre: 'Control de gasolina', desc: 'Control de consumo de gasolina',
+      url: '#gasolina', roles: ['admin','coordinacion'],
+      icono: '<path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3 21h12"/><path d="M14 10h2a2 2 0 0 1 2 2v5a1 1 0 0 0 2 0V8l-2-2"/>'
+    }
+  ];
+
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const FUNC_CALENDARIO = SUPABASE_URL + '/functions/v1/calendario';
+
+  const $ = (id) => document.getElementById(id);
+
+  async function entrar() {
+    $('error-login').textContent = '';
+    const { error } = await sb.auth.signInWithPassword({
+      email: $('correo').value.trim(),
+      password: $('clave').value
+    });
+    if (error) { $('error-login').textContent = 'Correo o contraseña incorrectos.'; return; }
+    await mostrarMenu();
+  }
+
+  async function mostrarMenu() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) { mostrarLogin(); return; }
+
+    const { data: perfil, error } = await sb.from('perfiles').select('nombre, rol, activo').eq('id', user.id).single();
+    if (error || !perfil || !perfil.activo) {
+      await sb.auth.signOut();
+      $('error-login').textContent = 'Tu cuenta no tiene acceso a la plataforma. Pide que te den de alta.';
+      mostrarLogin();
+      return;
+    }
+
+    $('saludo').textContent = 'Hola, ' + perfil.nombre;
+    $('rol').textContent = perfil.rol;
+    $('iniciales').textContent = perfil.nombre.split(' ').filter(p => p).slice(0, 2).map(p => p[0].toUpperCase()).join('');
+
+    const lista = $('lista-modulos');
+    lista.innerHTML = '';
+    MODULOS.filter(m => m.roles.includes(perfil.rol)).forEach(m => {
+      const a = document.createElement('a');
+      a.className = 'modulo';
+      a.href = m.url;
+      a.innerHTML = '<div class="icono"><svg viewBox="0 0 24 24">' + m.icono + '</svg></div><strong></strong><span></span><div class="flecha">Abrir →</div>';
+      a.querySelector('strong').textContent = m.nombre;
+      a.querySelector('span').textContent = m.desc || '';
+      lista.appendChild(a);
+    });
+
+    $('pantalla-login').classList.add('oculto');
+    $('pantalla-menu').classList.remove('oculto');
+    $('btn-salir').classList.remove('oculto');
+    await cargarGcal();
+  }
+
+  async function cargarGcal() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) return;
+    const cabeceras = { authorization: 'Bearer ' + session.access_token, apikey: SUPABASE_ANON_KEY };
+    $('gcal').classList.remove('oculto');
+    try {
+      const r = await fetch(FUNC_CALENDARIO + '/estado', { headers: cabeceras });
+      const j = await r.json();
+      if (!r.ok) { $('gcal-texto').textContent = 'No se pudo revisar Google Calendar.'; return; }
+      $('gcal-texto').textContent = j.conectado ? 'Google Calendar conectado: ' + j.correo : 'Tu Google Calendar no está conectado';
+      $('gcal-boton').textContent = j.conectado ? 'Cambiar cuenta' : 'Conectar mi Google Calendar';
+      $('gcal-boton').onclick = async () => {
+        const { data: { session: s } } = await sb.auth.getSession();
+        location.href = FUNC_CALENDARIO + '/conectar?token=' + s.access_token;
+      };
+    } catch (e) {
+      $('gcal-texto').textContent = 'No se pudo revisar Google Calendar.';
+    }
+  }
+
+  function mostrarLogin() {
+    $('pantalla-login').classList.remove('oculto');
+    $('pantalla-menu').classList.add('oculto');
+    $('btn-salir').classList.add('oculto');
+  }
+
+  async function salir() {
+    await sb.auth.signOut();
+    $('clave').value = '';
+    mostrarLogin();
+  }
+
+  $('btn-entrar').addEventListener('click', entrar);
+  $('btn-salir').addEventListener('click', salir);
+  $('clave').addEventListener('keydown', (e) => { if (e.key === 'Enter') entrar(); });
+
+  mostrarMenu();
+</script>
+</body>
+</html>

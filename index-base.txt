@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plataforma IMCA</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #f4f6f8; color: #1d2630; }
+  header { background: #1f4e79; color: #fff; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { font-size: 18px; margin: 0; }
+  main { max-width: 640px; margin: 0 auto; padding: 18px; }
+  .card { background: #fff; border-radius: 12px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 14px; }
+  label { display: block; font-size: 14px; margin: 10px 0 4px; }
+  input { width: 100%; padding: 12px; font-size: 16px; border: 1px solid #c9d2db; border-radius: 8px; }
+  button { width: 100%; padding: 14px; font-size: 16px; border: 0; border-radius: 10px; background: #1f4e79; color: #fff; margin-top: 14px; cursor: pointer; }
+  button.secundario { background: #5b6b7a; width: auto; padding: 8px 14px; margin: 0; font-size: 14px; }
+  .modulo { display: block; padding: 16px; margin: 10px 0; background: #fff; border-radius: 12px; text-decoration: none; color: #1d2630; box-shadow: 0 1px 3px rgba(0,0,0,.08); font-size: 17px; }
+  .error { color: #b00020; font-size: 14px; margin-top: 10px; min-height: 18px; }
+  .oculto { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Plataforma IMCA</h1>
+  <button id="btn-salir" class="secundario oculto">Salir</button>
+</header>
+
+<main>
+
+  <!-- PANTALLA 1: INICIO DE SESIÓN -->
+  <section id="pantalla-login" class="card">
+    <h2>Iniciar sesión</h2>
+    <label for="correo">Correo institucional</label>
+    <input id="correo" type="email" autocomplete="username">
+    <label for="clave">Contraseña</label>
+    <input id="clave" type="password" autocomplete="current-password">
+    <button id="btn-entrar">Entrar</button>
+    <div id="error-login" class="error"></div>
+  </section>
+
+  <!-- PANTALLA 2: MENÚ DE MÓDULOS (se muestra solo los que corresponden al rol) -->
+  <section id="pantalla-menu" class="oculto">
+    <p id="saludo"></p>
+    <div id="lista-modulos"></div>
+  </section>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // ==== CONFIGURACIÓN ====
+  // Reemplaza estos dos valores con los de tu proyecto de Supabase:
+  // Project Settings > API > Project URL y anon public key.
+  const SUPABASE_URL = 'PEGAR_PROJECT_URL_AQUI';
+  const SUPABASE_ANON_KEY = 'PEGAR_ANON_KEY_AQUI';
+
+  // Módulos de la plataforma y los roles que pueden entrar a cada uno.
+  // Son provisionales: se ajustan cuando migremos cada módulo.
+  const MODULOS = [
+    { nombre: 'Agenda general',            url: '#agenda-general',   roles: ['admin','agenda','terapeuta','consulta'] },
+    { nombre: 'Agenda de atención',        url: '#agenda-atencion',  roles: ['admin','agenda','terapeuta','consulta'] },
+    { nombre: 'Reportes de atención',      url: '#reportes',         roles: ['admin','coordinacion','operativo','consulta'] },
+    { nombre: 'Pláticas',                  url: '#platicas',         roles: ['admin','coordinacion','operativo','consulta'] },
+    { nombre: 'Vacaciones y faltas',       url: '#vacaciones',       roles: ['admin','coordinacion'] },
+    { nombre: 'Control de gasolina',       url: '#gasolina',         roles: ['admin','coordinacion'] }
+  ];
+
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const $ = (id) => document.getElementById(id);
+
+  async function entrar() {
+    $('error-login').textContent = '';
+    const { error } = await sb.auth.signInWithPassword({
+      email: $('correo').value.trim(),
+      password: $('clave').value
+    });
+    if (error) { $('error-login').textContent = 'Correo o contraseña incorrectos.'; return; }
+    await mostrarMenu();
+  }
+
+  async function mostrarMenu() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) { mostrarLogin(); return; }
+
+    // Lee el perfil y su rol. Si no tiene perfil activo, no entra.
+    const { data: perfil, error } = await sb.from('perfiles').select('nombre, rol, activo').eq('id', user.id).single();
+    if (error || !perfil || !perfil.activo) {
+      await sb.auth.signOut();
+      $('error-login').textContent = 'Tu cuenta no tiene acceso a la plataforma. Pide que te den de alta.';
+      mostrarLogin();
+      return;
+    }
+
+    $('saludo').textContent = 'Hola, ' + perfil.nombre + ' (' + perfil.rol + ')';
+    const lista = $('lista-modulos');
+    lista.innerHTML = '';
+    MODULOS.filter(m => m.roles.includes(perfil.rol)).forEach(m => {
+      const a = document.createElement('a');
+      a.className = 'modulo';
+      a.href = m.url;
+      a.textContent = m.nombre;
+      lista.appendChild(a);
+    });
+
+    $('pantalla-login').classList.add('oculto');
+    $('pantalla-menu').classList.remove('oculto');
+    $('btn-salir').classList.remove('oculto');
+  }
+
+  function mostrarLogin() {
+    $('pantalla-login').classList.remove('oculto');
+    $('pantalla-menu').classList.add('oculto');
+    $('btn-salir').classList.add('oculto');
+  }
+
+  async function salir() {
+    await sb.auth.signOut();
+    $('clave').value = '';
+    mostrarLogin();
+  }
+
+  $('btn-entrar').addEventListener('click', entrar);
+  $('btn-salir').addEventListener('click', salir);
+  $('clave').addEventListener('keydown', (e) => { if (e.key === 'Enter') entrar(); });
+
+  // Al abrir la página, si ya hay sesión, va directo al menú.
+  mostrarMenu();
+</script>
+</body>
+</html>
